@@ -1,0 +1,31 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android / local SDK config — never commit machine-specific paths
+local.properties
+
+# Secrets & signing — see CLAUDE.md security standards. Never commit these.
+*.jks
+*.keystore
+keystore.properties
+*.p12
+*.pem
+secrets.properties
+
+# IDE
+.idea/
+*.iml
+.kotlin/
+captures/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
