@@ -16,7 +16,9 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import io.github.martinzitka.trailog.spike.data.SpikeDatabase
@@ -72,7 +74,17 @@ class RecordingService : Service(), LocationListener, SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundCompat()
+        BootLog.append(this, "RecordingService.onStartCommand reached (startId=$startId)")
+        try {
+            startForegroundCompat()
+            BootLog.append(this, "startForeground(location) OK")
+        } catch (t: Throwable) {
+            // On Android 12+ starting a location FGS from the background can be refused
+            // (ForegroundServiceStartNotAllowedException). Record it and bail cleanly.
+            BootLog.append(this, "startForeground REFUSED ${t.javaClass.simpleName}: ${t.message}")
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         // A new service start always begins a new session => a new segment on recovery.
         scope.launch {
@@ -93,21 +105,28 @@ class RecordingService : Service(), LocationListener, SensorEventListener {
     }
 
     private fun startSensors() {
+        // We are called from a background coroutine (Dispatchers.IO). The LocationManager
+        // registration overloads that take no Looper create a Handler on the *calling*
+        // thread, which has no Looper here and would crash. Deliver callbacks on the main
+        // looper explicitly so registration thread does not matter.
+        val mainLooper = Looper.getMainLooper()
+        val mainHandler = Handler(mainLooper)
         try {
             locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
                 1000L, // 1 Hz
                 0f,
                 this,
+                mainLooper,
             )
-            locationManager.registerGnssStatusCallback(gnssCallback, null)
+            locationManager.registerGnssStatusCallback(gnssCallback, mainHandler)
         } catch (e: SecurityException) {
             // Permission was revoked out from under us. Stop cleanly rather than crash.
             stopSelf()
             return
         }
         barometer?.let {
-            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL, mainHandler)
         }
     }
 
