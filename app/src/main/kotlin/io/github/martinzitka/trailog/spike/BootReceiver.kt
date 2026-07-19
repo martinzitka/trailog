@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
+        BootLog.append(context, "onReceive action=$action")
         if (action != Intent.ACTION_BOOT_COMPLETED &&
             action != Intent.ACTION_LOCKED_BOOT_COMPLETED
         ) {
@@ -34,11 +35,20 @@ class BootReceiver : BroadcastReceiver() {
         } else {
             true
         }
+        BootLog.append(context, "backgroundLocationGranted=$hasBackground")
 
         // Only attempt if we actually hold background location; otherwise a start would
-        // throw SecurityException on API 34+. The debug screen reports whether we got here.
+        // throw SecurityException on API 34+. Wrap the start so any refusal is recorded
+        // rather than lost — that is the whole point of this probe.
         if (hasBackground) {
-            RecordingService.start(context)
+            try {
+                RecordingService.start(context)
+                BootLog.append(context, "startForegroundService: call returned OK")
+            } catch (t: Throwable) {
+                BootLog.append(context, "startForegroundService THREW ${t.javaClass.simpleName}: ${t.message}")
+            }
+        } else {
+            BootLog.append(context, "skipped start: no background location")
         }
     }
 }
