@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base Activity theme. Compose supplies the real UI theme; this only needs to be a
+         no-action-bar surface. values-night/ overrides it in dark mode. Parenting the
+         platform DeviceDefault theme avoids the Material XML components library. -->
+    <style name="Theme.TrailogM0" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+</resources>
