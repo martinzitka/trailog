@@ -24,12 +24,15 @@ object Statistics {
         val distance = distance(segments)
         val moving = movingTime(segments, type)
         val movingSeconds = moving.toDouble(DurationUnit.SECONDS)
+        val elevation = Elevation.change(segments)
         return ActivityStats(
             distance = distance,
             elapsedTime = elapsedTime(segments),
             movingTime = moving,
             averageSpeed = if (movingSeconds > 0) distance / movingSeconds else 0.0,
             maxSpeed = maxSpeed(segments),
+            elevationGain = elevation.gain,
+            elevationLoss = elevation.loss,
             segmentCount = segments.size,
             pointCount = segments.sumOf { it.points.size },
         )
