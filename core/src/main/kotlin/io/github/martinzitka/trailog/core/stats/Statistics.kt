@@ -20,6 +20,10 @@ object Statistics {
     fun compute(activity: Activity): ActivityStats =
         compute(activity.segments(), activity.type)
 
+    /** Convenience: fixed-distance splits over an activity's segments. See [splits]. */
+    fun splits(activity: Activity, splitDistance: Double = 1000.0): List<Split> =
+        splits(activity.segments(), activity.type, splitDistance)
+
     fun compute(segments: List<Segment>, type: ActivityType): ActivityStats {
         val distance = distance(segments)
         val moving = movingTime(segments, type)
@@ -72,6 +76,105 @@ object Statistics {
             }
         }
         return total
+    }
+
+    /**
+     * The activity broken into fixed-distance splits (a "per-km" table, but the distance is a
+     * parameter — pass 1609.344 for miles, 5000.0 for 5 km laps, anything).
+     *
+     * Distance accumulates **within segments only**: a hop between two consecutive in-segment
+     * fixes is distributed across the split(s) it covers, interpolating at a split boundary
+     * crossed mid-hop (that boundary is inside a segment, so interpolation is legitimate). A
+     * gap between segments contributes no distance and is never bridged, so a split may span a
+     * recording gap — its [Split.movingTime] stays correct because the dead gap was never
+     * moving time.
+     *
+     * Elevation gain/loss per split reuses [Elevation]'s deadband bookings, each attributed to
+     * the split its crossing point falls in; the per-split figures therefore sum exactly to the
+     * activity totals from [Elevation.change].
+     *
+     * @param splitDistance the length of each split in metres; must be positive. Default 1 km.
+     * @return one [Split] per interval in order; the last is usually shorter than
+     *   [splitDistance]. Empty when the activity has no distance.
+     */
+    fun splits(
+        segments: List<Segment>,
+        type: ActivityType,
+        splitDistance: Double = 1000.0,
+        elevationParams: ElevationParams = ElevationParams(),
+    ): List<Split> {
+        require(splitDistance > 0.0) { "splitDistance must be > 0, was $splitDistance" }
+
+        val accs = ArrayList<SplitAcc>()
+        fun accFor(index: Int): SplitAcc {
+            while (accs.size <= index) accs.add(SplitAcc())
+            return accs[index]
+        }
+
+        // Pass 1 — distance and moving time. Distribute each hop across the splits it spans,
+        // splitting time in proportion to distance where a hop crosses a split boundary. Also
+        // record each altitude-bearing point's cumulative distance for the elevation pass.
+        var cumulative = 0.0
+        val altitudeCumulative = ArrayList<List<Double>>(segments.size)
+        for (seg in segments) {
+            val segAltCum = ArrayList<Double>()
+            if (seg.points.first().altitude != null) segAltCum.add(cumulative)
+            for ((a, b) in seg.points.zipWithNext()) {
+                val hopDistance = hop(a, b)
+                val dt = b.time - a.time
+                val seconds = dt.toDouble(DurationUnit.SECONDS)
+                val moving = seconds > 0 && hopDistance / seconds >= type.movingSpeedThreshold
+
+                var start = cumulative
+                var remaining = hopDistance
+                while (remaining > 1e-9) {
+                    val index = (start / splitDistance).toInt()
+                    val boundary = (index + 1) * splitDistance
+                    val take = minOf(remaining, boundary - start)
+                    val acc = accFor(index)
+                    acc.distance += take
+                    if (moving) acc.movingTime += dt.times(take / hopDistance)
+                    start += take
+                    remaining -= take
+                }
+                cumulative += hopDistance
+                if (b.altitude != null) segAltCum.add(cumulative)
+            }
+            altitudeCumulative.add(segAltCum)
+        }
+
+        // Pass 2 — elevation. Book gain/loss into the split each crossing point belongs to.
+        for ((segIndex, seg) in segments.withIndex()) {
+            val altitudes = seg.points.mapNotNull { it.altitude }
+            val cumForAltitude = altitudeCumulative[segIndex]
+            for (booking in Elevation.bookings(altitudes, elevationParams)) {
+                val at = cumForAltitude[booking.altitudeIndex]
+                // A crossing exactly on the final boundary belongs to the split just closed.
+                val index = minOf((at / splitDistance).toInt(), maxOf(0, accs.size - 1))
+                val acc = accFor(index)
+                if (booking.delta >= 0.0) acc.gain += booking.delta else acc.loss += -booking.delta
+            }
+        }
+
+        return accs.mapIndexed { index, acc ->
+            val movingSeconds = acc.movingTime.toDouble(DurationUnit.SECONDS)
+            Split(
+                index = index,
+                distance = acc.distance,
+                movingTime = acc.movingTime,
+                elevationGain = acc.gain,
+                elevationLoss = acc.loss,
+                averageSpeed = if (movingSeconds > 0) acc.distance / movingSeconds else 0.0,
+            )
+        }
+    }
+
+    /** Mutable per-split tally, collapsed into an immutable [Split] once the passes finish. */
+    private class SplitAcc {
+        var distance: Double = 0.0
+        var movingTime: Duration = Duration.ZERO
+        var gain: Double = 0.0
+        var loss: Double = 0.0
     }
 
     /** Fastest instantaneous speed (m/s) between two consecutive in-segment fixes. */
