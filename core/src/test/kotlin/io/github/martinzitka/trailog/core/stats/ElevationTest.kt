@@ -35,9 +35,11 @@ class ElevationTest {
 
     @Test
     fun `steady climb is measured close to the true rise`() {
-        // 100 points climbing 1 m each: ~99 m of real climb, no descent.
+        // 100 points climbing 1 m each: ~99 m of real climb, no descent. Pinned to a fixed
+        // threshold so this tests algorithm mechanics, not the production default (which is
+        // tuned to real GPS noise and validated separately by the real-fixture test).
         val altitudes = List(100) { 100.0 + it }
-        val change = Elevation.change(segmentsOf(altitudes))
+        val change = Elevation.change(segmentsOf(altitudes), ElevationParams(threshold = 3.0))
         // Accumulation books all but a sub-threshold remainder, and edge smoothing trims the
         // ends slightly, so expect just under the raw span of 99 m — never above it.
         assertTrue(change.gain in 90.0..99.0, "gain ${change.gain} not in 90..99")
@@ -48,7 +50,8 @@ class ElevationTest {
     fun `a round trip back to the start counts symmetric gain and loss`() {
         val up = (100..160 step 2).map { it.toDouble() } // 100 -> 160
         val down = (158 downTo 100 step 2).map { it.toDouble() } // 158 -> 100
-        val change = Elevation.change(segmentsOf(up + down))
+        // Fixed threshold: this checks up/down symmetry mechanics, not the production default.
+        val change = Elevation.change(segmentsOf(up + down), ElevationParams(threshold = 3.0))
         // Edge smoothing trims both ends and rounds the peak, so expect a bit under the raw
         // 60 m span each way — but never above it, and never zero.
         assertTrue(change.gain in 48.0..60.0, "gain ${change.gain}")

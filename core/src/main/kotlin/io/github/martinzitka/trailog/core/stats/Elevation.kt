@@ -21,11 +21,18 @@ data class ElevationChange(
  *   it is sample-rate dependent; at the 1 Hz Trailog records this is a window in seconds.
  * @property threshold metres of net change that must accumulate, in one direction, before it
  *   is booked. This deadband (hysteresis) is what stops GPS altitude noise from inflating the
- *   most-compared and most-wrong statistic (CLAUDE.md).
+ *   most-compared and most-wrong statistic (CLAUDE.md). The threshold — not the window — is the
+ *   dominant lever on the final number; raising it discards more noise-driven micro-climb.
+ *
+ * Defaults tuned (2026-08-05) against the first real reference ride with a trusted DEM
+ * elevation profile (mapy.cz, 466 m over the same route): window 7, threshold 6 lands ~495 m,
+ * roughly midway between that DEM figure and Sports Tracker's lightly-smoothed GPS figure
+ * (552 m). Still PROVISIONAL — a barometer-equipped device or DEM anchoring, and more reference
+ * rides, would tighten it. See `docs/adr/0006-elevation-smoothing-defaults.md`.
  */
 data class ElevationParams(
     val smoothingWindow: Int = 7,
-    val threshold: Double = 3.0,
+    val threshold: Double = 6.0,
 ) {
     init {
         require(smoothingWindow >= 1) { "smoothingWindow must be >= 1, was $smoothingWindow" }
@@ -65,22 +72,44 @@ object Elevation {
         for (seg in segments) {
             // Only points that actually carry an altitude can contribute. Order is preserved.
             val altitudes = seg.points.mapNotNull { it.altitude }
-            if (altitudes.size < 2) continue
-            val smoothed = movingAverage(altitudes, params.smoothingWindow)
-
-            var reference = smoothed.first()
-            for (value in smoothed) {
-                val delta = value - reference
-                if (delta >= params.threshold) {
-                    gain += delta
-                    reference = value
-                } else if (delta <= -params.threshold) {
-                    loss += -delta
-                    reference = value
-                }
+            for (booking in bookings(altitudes, params)) {
+                if (booking.delta >= 0.0) gain += booking.delta else loss += -booking.delta
             }
         }
         return ElevationChange(gain = gain, loss = loss)
+    }
+
+    /**
+     * A single elevation change booked by the deadband, tied to the point that crossed the
+     * threshold. [altitudeIndex] indexes the altitude-bearing points of a segment, in order
+     * (i.e. the list handed to [bookings], not `seg.points` — points without altitude are
+     * absent). [delta] is signed: positive is a climb, negative a descent.
+     */
+    internal data class Booking(val altitudeIndex: Int, val delta: Double)
+
+    /**
+     * The sequence of gain/loss bookings for one segment's altitude series, smoothing and
+     * deadband applied. This is the single source of truth for elevation accumulation:
+     * [change] sums the magnitudes; [Statistics.splits] attributes each booking to the split
+     * its point falls in. Computing it here once is what stops the total and the per-split
+     * sum from ever disagreeing (CLAUDE.md: a statistic is never computed two ways).
+     */
+    internal fun bookings(altitudes: List<Double>, params: ElevationParams): List<Booking> {
+        if (altitudes.size < 2) return emptyList()
+        val smoothed = movingAverage(altitudes, params.smoothingWindow)
+        val out = ArrayList<Booking>()
+        var reference = smoothed.first()
+        for (i in smoothed.indices) {
+            val delta = smoothed[i] - reference
+            if (delta >= params.threshold) {
+                out.add(Booking(i, delta))
+                reference = smoothed[i]
+            } else if (delta <= -params.threshold) {
+                out.add(Booking(i, delta))
+                reference = smoothed[i]
+            }
+        }
+        return out
     }
 
     /**
