@@ -272,10 +272,14 @@ private fun RecordingScreen(engine: AndroidRecordingEngine, modifier: Modifier =
             onClick = {
                 uiScope.launch {
                     val msg = withContext(Dispatchers.IO) {
-                        val dao = db.rawPointDao()
-                        val id = dao.latestActivityId()
-                        if (id == null) "nothing recorded yet"
-                        else GpxExport.export(context, System.currentTimeMillis(), dao.pointsFor(id))
+                        try {
+                            val dao = db.rawPointDao()
+                            val id = dao.latestActivityId()
+                            if (id == null) "nothing recorded yet"
+                            else GpxExport.export(context, System.currentTimeMillis(), dao.pointsFor(id))
+                        } catch (t: Throwable) {
+                            "export failed: ${t.javaClass.simpleName}: ${t.message}"
+                        }
                     }
                     exportResult.value = msg
                 }
