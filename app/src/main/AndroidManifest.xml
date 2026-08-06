@@ -28,7 +28,7 @@
         android:theme="@style/Theme.TrailogM0">
 
         <activity
-            android:name=".spike.MainActivity"
+            android:name=".ui.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -39,20 +39,19 @@
         <!-- stopWithTask=false: swiping from recents must not stop recording.
              foregroundServiceType=location: required on API 34+. -->
         <service
-            android:name=".spike.RecordingService"
+            android:name=".recording.RecordingForegroundService"
             android:exported="false"
             android:foregroundServiceType="location"
             android:stopWithTask="false" />
 
-        <!-- Reboot recovery. Verifying a location FGS can be started from here with
-             ACCESS_BACKGROUND_LOCATION granted is an explicit M0 acceptance criterion. -->
+        <!-- Best-effort reboot recovery (ADR 0004). Only BOOT_COMPLETED: the Room database is
+             in credential-encrypted storage, unreadable before first unlock. -->
         <receiver
-            android:name=".spike.BootReceiver"
+            android:name=".recording.BootRecoveryReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
     </application>

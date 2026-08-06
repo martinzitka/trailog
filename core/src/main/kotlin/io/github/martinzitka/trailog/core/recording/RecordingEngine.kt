@@ -49,6 +49,14 @@ interface RecordingEngine {
     fun finalize()
 
     /**
+     * Resumes an interrupted session that the recovery policy left in [RecordingState.RECOVERING]
+     * awaiting the user's answer (the "Resume" action on the interrupted-session prompt). Opens a
+     * new segment and restarts capture.
+     * @throws IllegalRecordingTransition if there is no session awaiting recovery.
+     */
+    fun recoverResume()
+
+    /**
      * Persists a single fix into the current segment. Called by the platform layer for each
      * location update while [RecordingState.RECORDING]. The point is stored unmodified; the
      * engine stamps it with the current segment index and updates [RecordingSession.lastFixTime].

@@ -5,10 +5,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// M0 RECORDING SPIKE — throwaway (see IMPLEMENTATION_PLAN.md M0).
-// The only purpose of this module right now is to prove background GPS recording survives
-// on real hardware. Written fast and deliberately without architecture. It will be
-// deleted or rewritten for M1. Do not build features on top of it.
+// M1 Android app. The M0 spike is gone; this is real code. Packages:
+//   data/      Room persistence (raw_points, recording_sessions), PRAGMA synchronous = FULL
+//   recording/ the RecordingEngine implementation, foreground service, boot recovery
+//   ui/        interim M1.3 control+diagnostics harness (real screens are M1.5)
 
 android {
     namespace = "io.github.martinzitka.trailog"
@@ -57,6 +57,9 @@ android {
         // -v26 is the conventional adaptive-icon folder (AAPT requires the version
         // qualifier); the "redundant since minSdk 26" nag is cosmetic.
         disable += setOf("ObsoleteSdkInt")
+        // The "N fixes" diagnostic counter in the recording notification is a live debug
+        // readout, not prose that needs pluralisation. Real user-facing strings arrive in M1.5.
+        disable += setOf("PluralsCandidate")
     }
 }
 

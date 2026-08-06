@@ -10,8 +10,11 @@ kotlin {
 }
 
 dependencies {
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.datetime)
+    // `api`, not `implementation`: both types appear in :core's public API — RawPoint.time and
+    // RecordingSession.startTime are kotlinx.datetime.Instant, and RecordingEngine.session is a
+    // kotlinx.coroutines StateFlow — so consumers (:app, :server) must see them transitively.
+    api(libs.kotlinx.coroutines.core)
+    api(libs.kotlinx.datetime)
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.junit.jupiter)
