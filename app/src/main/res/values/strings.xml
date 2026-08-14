@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Trailog M0</string>
+    <string name="app_name">Trailog</string>
+
+    <!-- Recording foreground-service notification. -->
+    <string name="recording_channel_name">Recording</string>
+    <string name="recording_channel_description">Active GPS recording</string>
+    <string name="recording_notification_active">Trailog · recording</string>
+    <string name="recording_notification_paused">Trailog · paused</string>
+    <!-- %1$s elapsed, %2$d fixes this run, %3$s accuracy in metres. -->
+    <string name="recording_notification_text">%1$s · %2$d fixes · acc %3$s m</string>
 </resources>
