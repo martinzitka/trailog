@@ -1,0 +1,212 @@
+package io.github.martinzitka.trailog.ui.record
+
+import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import io.github.martinzitka.trailog.core.model.Activity
+import io.github.martinzitka.trailog.core.model.ActivityType
+import io.github.martinzitka.trailog.core.recording.RecordingEngine
+import io.github.martinzitka.trailog.core.recording.RecordingSession
+import io.github.martinzitka.trailog.core.recording.RecordingState
+import io.github.martinzitka.trailog.core.stats.Statistics
+import io.github.martinzitka.trailog.data.ActivityRepository
+import io.github.martinzitka.trailog.data.TrailogDatabase
+import io.github.martinzitka.trailog.recording.AndroidRecordingEngine
+import io.github.martinzitka.trailog.ui.map.TracePoint
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlin.time.DurationUnit
+
+/**
+ * The Record screen's state holder. It derives the seven-case [RecordUiState] from three inputs —
+ * the durable recording [RecordingSession] (from the engine), the permission/battery
+ * [RecordEnvironment] (pushed in by the screen), and live statistics recomputed each second from
+ * the raw points — and forwards user intent to the [RecordingEngine].
+ *
+ * It holds no Android types: permissions arrive as booleans via [updateEnvironment], and live
+ * stats are loaded through an injected [loadActivity] lambda. That keeps the interesting logic
+ * ([reduce]) a pure function and unit-testable without a device (CLAUDE.md testing policy).
+ *
+ * No coordinates are logged — nothing is logged here at all.
+ */
+class RecordViewModel(
+    private val engine: RecordingEngine,
+    private val loadActivity: suspend (String) -> Activity?,
+    private val settings: RecordSettings,
+    private val now: () -> Instant = { Clock.System.now() },
+    ticker: Flow<Unit> = secondTicker(),
+) : ViewModel() {
+
+    private val environment = MutableStateFlow(RecordEnvironment())
+    private val selectedType = MutableStateFlow(settings.lastActivityType())
+    private val livePayload = MutableStateFlow<LivePayload?>(null)
+
+    init {
+        // Refresh live stats on every session change and every tick, cancelling an in-flight
+        // recompute if a newer trigger arrives. Recomputing over the raw points once a second is
+        // cheap — a four-hour ride is ~14k points and "data volume is not a problem" (CLAUDE.md).
+        viewModelScope.launch {
+            combine(engine.session, ticker.onStart { emit(Unit) }) { session, _ -> session }
+                .collectLatest { session ->
+                    livePayload.value = session?.let { loadLive(it) }
+                }
+        }
+    }
+
+    val uiState: StateFlow<RecordUiState> =
+        combine(engine.session, environment, selectedType, livePayload) { session, env, type, live ->
+            reduce(session, env, type, live)
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+            initialValue = reduce(
+                engine.session.value, environment.value, selectedType.value, livePayload.value,
+            ),
+        )
+
+    // ---- intent ---------------------------------------------------------------------------
+
+    /** Push the latest permission / battery-optimisation state, read by the screen from the OS. */
+    fun updateEnvironment(env: RecordEnvironment) {
+        environment.value = env
+    }
+
+    /** Pre-select an activity type while idle. The choice is persisted only once recording starts. */
+    fun selectType(type: ActivityType) {
+        selectedType.value = type
+    }
+
+    fun start() {
+        val type = selectedType.value
+        settings.setLastActivityType(type)
+        engine.start(type)
+    }
+
+    fun pause() = engine.pause()
+    fun resume() = engine.resume()
+
+    /** Confirmed stop: finalise and save the activity. */
+    fun stop() {
+        engine.requestStop()
+        engine.finalize()
+    }
+
+    /** Resume an interrupted session into a new segment. */
+    fun recoverResume() = engine.recoverResume()
+
+    /** Finish an interrupted session without resuming, saving what was recorded. */
+    fun recoverFinish() = engine.finalize()
+
+    // ---- derivation -----------------------------------------------------------------------
+
+    /**
+     * Pure mapping from inputs to screen state — the whole phase logic in one testable place.
+     * Live data is only trusted when it belongs to the current session, so a stale payload from
+     * a just-finished activity never leaks into the next one.
+     */
+    internal fun reduce(
+        session: RecordingSession?,
+        env: RecordEnvironment,
+        selected: ActivityType,
+        live: LivePayload?,
+    ): RecordUiState {
+        val validLive = live?.takeIf { session != null && it.activityId == session.activityId.toString() }
+        return when (session?.state) {
+            null, RecordingState.IDLE ->
+                if (!env.canRecord) RecordUiState.PermissionsMissing(env)
+                else RecordUiState.Ready(selected, env)
+
+            RecordingState.RECORDING -> RecordUiState.Recording(
+                activityType = session.type,
+                live = validLive?.live ?: LiveStats.EMPTY,
+                segments = validLive?.segments ?: emptyList(),
+                environment = env,
+            )
+
+            RecordingState.PAUSED -> RecordUiState.Paused(
+                activityType = session.type,
+                live = validLive?.live ?: LiveStats.EMPTY,
+                segments = validLive?.segments ?: emptyList(),
+                environment = env,
+            )
+
+            RecordingState.STOPPING -> RecordUiState.Saving(env)
+
+            RecordingState.RECOVERING -> RecordUiState.InterruptedSessionFound(
+                gapSeconds = validLive?.gapSeconds ?: 0,
+                environment = env,
+            )
+        }
+    }
+
+    private suspend fun loadLive(session: RecordingSession): LivePayload {
+        val id = session.activityId.toString()
+        val activity = loadActivity(id)
+            ?: return LivePayload(id, LiveStats.EMPTY, emptyList(), 0)
+
+        val segments = activity.segments()
+        val stats = Statistics.compute(segments, activity.type)
+        val nowInstant = now()
+
+        val elapsedSeconds = (nowInstant - session.startTime)
+            .toLong(DurationUnit.SECONDS).coerceAtLeast(0)
+        val lastPoint = activity.points.maxByOrNull { it.time }
+        val gapSeconds = lastPoint?.let { (nowInstant - it.time).toLong(DurationUnit.SECONDS) }
+            ?.coerceAtLeast(0) ?: 0
+
+        return LivePayload(
+            activityId = id,
+            live = LiveStats(
+                elapsedSeconds = elapsedSeconds,
+                movingSeconds = stats.movingTime.toLong(DurationUnit.SECONDS),
+                distance = stats.distance,
+                currentSpeed = lastPoint?.speed ?: 0.0,
+                elevationGain = stats.elevationGain,
+            ),
+            segments = segments.map { seg ->
+                seg.points.map { TracePoint(it.latitude, it.longitude) }
+            },
+            gapSeconds = gapSeconds,
+        )
+    }
+
+    /** Live figures plus the id they belong to, so a stale load is never shown for a new session. */
+    internal data class LivePayload(
+        val activityId: String,
+        val live: LiveStats,
+        val segments: List<List<TracePoint>>,
+        val gapSeconds: Long,
+    )
+
+    /**
+     * Assembles a [RecordViewModel] wired to the real engine, repository and preferences. Held as
+     * a [ViewModelProvider.Factory] so the screen gets a lifecycle-scoped instance.
+     */
+    class Factory(context: Context) : ViewModelProvider.Factory {
+        private val appContext = context.applicationContext
+
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            val repository = ActivityRepository(TrailogDatabase.get(appContext))
+            return RecordViewModel(
+                engine = AndroidRecordingEngine.get(appContext),
+                loadActivity = repository::loadActivity,
+                settings = PrefsRecordSettings(appContext),
+            ) as T
+        }
+    }
+
+    private companion object {
+        const val STOP_TIMEOUT_MS = 5_000L
+    }
+}

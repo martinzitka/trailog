@@ -1,0 +1,491 @@
+package io.github.martinzitka.trailog.ui.record
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import io.github.martinzitka.trailog.R
+import io.github.martinzitka.trailog.core.model.ActivityType
+import io.github.martinzitka.trailog.ui.format.Format
+import io.github.martinzitka.trailog.ui.format.icon
+import io.github.martinzitka.trailog.ui.format.label
+import io.github.martinzitka.trailog.ui.map.RouteMap
+import io.github.martinzitka.trailog.ui.map.TracePoint
+
+/**
+ * The Record screen. Renders each of the seven [RecordUiState] cases and forwards intent to the
+ * [RecordViewModel]. All Android-specific work — reading permissions, launching the system
+ * permission dialogs and settings pages — lives here at the edge; the ViewModel stays platform-free.
+ *
+ * Permission and battery-optimisation state is re-read on every ON_RESUME (so returning from the
+ * system settings page reflects immediately) and after each permission dialog result.
+ */
+@Composable
+fun RecordScreen(
+    viewModel: RecordViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val state by viewModel.uiState.collectAsState()
+
+    val foregroundLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { viewModel.updateEnvironment(RecordPermissions.read(context)) }
+    val backgroundLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { viewModel.updateEnvironment(RecordPermissions.read(context)) }
+
+    // Re-read the environment whenever the screen resumes (e.g. back from system settings).
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.updateEnvironment(RecordPermissions.read(context))
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(Unit) { viewModel.updateEnvironment(RecordPermissions.read(context)) }
+
+    var showStopConfirm by rememberSaveable { mutableStateOf(false) }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        when (val s = state) {
+            is RecordUiState.PermissionsMissing -> PermissionsMissingContent(
+                onGrant = { foregroundLauncher.launch(RecordPermissions.foregroundPermissions()) },
+                onOpenSettings = { RecordPermissions.openAppSettings(context) },
+            )
+
+            is RecordUiState.Ready -> ReadyContent(
+                state = s,
+                onSelectType = viewModel::selectType,
+                onStart = viewModel::start,
+                onRequestBackground = {
+                    val perm = RecordPermissions.backgroundPermission()
+                    if (perm != null) backgroundLauncher.launch(perm)
+                    else RecordPermissions.openAppSettings(context)
+                },
+                onOpenSettings = { RecordPermissions.openAppSettings(context) },
+                onFixBattery = { RecordPermissions.requestBatteryExemption(context) },
+            )
+
+            is RecordUiState.Recording -> ActiveContent(
+                type = s.activityType,
+                live = s.live,
+                segments = s.segments,
+                warnings = s.environment.warnings,
+                primaryLabel = stringResource(R.string.record_pause),
+                onPrimary = viewModel::pause,
+                onStop = { showStopConfirm = true },
+                onFixBattery = { RecordPermissions.requestBatteryExemption(context) },
+            )
+
+            is RecordUiState.Paused -> ActiveContent(
+                type = s.activityType,
+                live = s.live,
+                segments = s.segments,
+                warnings = s.environment.warnings,
+                primaryLabel = stringResource(R.string.record_resume),
+                onPrimary = viewModel::resume,
+                onStop = { showStopConfirm = true },
+                onFixBattery = { RecordPermissions.requestBatteryExemption(context) },
+            )
+
+            is RecordUiState.Saving -> SavingContent()
+
+            is RecordUiState.InterruptedSessionFound -> InterruptedContent(
+                gapSeconds = s.gapSeconds,
+                onResume = viewModel::recoverResume,
+                onFinish = viewModel::recoverFinish,
+            )
+        }
+    }
+
+    if (showStopConfirm) {
+        StopConfirmDialog(
+            onConfirm = {
+                showStopConfirm = false
+                viewModel.stop()
+            },
+            onDismiss = { showStopConfirm = false },
+        )
+    }
+}
+
+// ---- states ------------------------------------------------------------------------------
+
+@Composable
+private fun PermissionsMissingContent(
+    onGrant: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Text(
+        stringResource(R.string.record_permissions_missing_title),
+        style = MaterialTheme.typography.titleLarge,
+    )
+    Text(
+        stringResource(R.string.record_permissions_missing_body),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    Text(
+        stringResource(R.string.record_background_rationale),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Button(onClick = onGrant, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.record_grant_foreground))
+    }
+    OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.record_open_settings))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReadyContent(
+    state: RecordUiState.Ready,
+    onSelectType: (ActivityType) -> Unit,
+    onStart: () -> Unit,
+    onRequestBackground: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onFixBattery: () -> Unit,
+) {
+    Text(stringResource(R.string.record_ready_hint), style = MaterialTheme.typography.bodyLarge)
+
+    Text(stringResource(R.string.record_activity_type), style = MaterialTheme.typography.titleMedium)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ActivityType.entries.forEach { type ->
+            FilterChip(
+                selected = state.activityType == type,
+                onClick = { onSelectType(type) },
+                leadingIcon = {
+                    Icon(type.icon(), contentDescription = null, modifier = Modifier.sizeIn(maxWidth = 18.dp, maxHeight = 18.dp))
+                },
+                label = { Text(type.label()) },
+            )
+        }
+    }
+
+    LiveTraceMap(segments = emptyList())
+
+    Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Text(stringResource(R.string.record_start))
+    }
+
+    WarningCards(
+        warnings = state.environment.warnings,
+        onRequestBackground = onRequestBackground,
+        onOpenSettings = onOpenSettings,
+        onFixBattery = onFixBattery,
+    )
+}
+
+@Composable
+private fun ActiveContent(
+    type: ActivityType,
+    live: LiveStats,
+    segments: List<List<TracePoint>>,
+    warnings: List<RecordWarning>,
+    primaryLabel: String,
+    onPrimary: () -> Unit,
+    onStop: () -> Unit,
+    onFixBattery: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(type.icon(), contentDescription = null)
+        Text(type.label(), style = MaterialTheme.typography.titleMedium)
+    }
+
+    LiveTraceMap(segments = segments)
+
+    LiveStatsGrid(live)
+
+    Button(
+        onClick = onPrimary,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+    ) { Text(primaryLabel) }
+    OutlinedButton(
+        onClick = onStop,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+    ) { Text(stringResource(R.string.record_stop)) }
+
+    // While recording, only the battery-exemption gap is worth nagging about; the others matter
+    // before the ride, not during it.
+    if (warnings.contains(RecordWarning.BATTERY_NOT_EXEMPT)) {
+        BatteryWarningCard(onFixBattery)
+    }
+}
+
+@Composable
+private fun SavingContent() {
+    Box(
+        modifier = Modifier.fillMaxWidth().height(200.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator()
+            Text(stringResource(R.string.record_saving), style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun InterruptedContent(
+    gapSeconds: Long,
+    onResume: () -> Unit,
+    onFinish: () -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Restore, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                Text(
+                    stringResource(R.string.record_interrupted_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            Text(
+                stringResource(R.string.record_interrupted_body, Format.elapsedSince(gapSeconds)),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = onResume, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.record_interrupted_resume))
+                }
+                OutlinedButton(onClick = onFinish, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.record_interrupted_finish))
+                }
+            }
+        }
+    }
+}
+
+// ---- pieces ------------------------------------------------------------------------------
+
+@Composable
+private fun LiveTraceMap(segments: List<List<TracePoint>>) {
+    Card(
+        modifier = Modifier.fillMaxWidth().height(220.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        RouteMap(
+            segments = segments,
+            modifier = Modifier.fillMaxSize(),
+            contentDescription = stringResource(R.string.record_title),
+            emptyLabel = stringResource(R.string.record_trace_empty),
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LiveStatsGrid(live: LiveStats) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        StatTile(stringResource(R.string.record_stat_elapsed), Format.duration(live.elapsedSeconds))
+        StatTile(stringResource(R.string.record_stat_moving), Format.duration(live.movingSeconds))
+        StatTile(stringResource(R.string.record_stat_distance), Format.distance(live.distance))
+        StatTile(stringResource(R.string.record_stat_speed), Format.speed(live.currentSpeed))
+        StatTile(stringResource(R.string.record_stat_elevation_gain), Format.elevation(live.elevationGain))
+    }
+}
+
+@Composable
+private fun StatTile(label: String, value: String) {
+    Card(
+        modifier = Modifier.sizeIn(minWidth = 150.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Text(
+                value,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WarningCards(
+    warnings: List<RecordWarning>,
+    onRequestBackground: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onFixBattery: () -> Unit,
+) {
+    warnings.forEach { warning ->
+        when (warning) {
+            RecordWarning.NO_BACKGROUND_LOCATION -> WarningCard(
+                icon = Icons.Filled.WarningAmber,
+                title = stringResource(R.string.record_permission_background),
+                body = stringResource(R.string.record_background_rationale),
+                actionLabel = stringResource(R.string.record_request_background),
+                onAction = onRequestBackground,
+                secondaryLabel = stringResource(R.string.record_open_settings),
+                onSecondary = onOpenSettings,
+            )
+
+            RecordWarning.NO_NOTIFICATIONS -> WarningCard(
+                icon = Icons.Filled.NotificationsOff,
+                title = stringResource(R.string.record_permission_notifications),
+                body = stringResource(R.string.record_notifications_rationale),
+                actionLabel = stringResource(R.string.record_open_settings),
+                onAction = onOpenSettings,
+            )
+
+            RecordWarning.BATTERY_NOT_EXEMPT -> BatteryWarningCard(onFixBattery)
+        }
+    }
+}
+
+@Composable
+private fun BatteryWarningCard(onFixBattery: () -> Unit) {
+    WarningCard(
+        icon = Icons.Filled.BatteryAlert,
+        title = stringResource(R.string.record_battery_warning_title),
+        body = stringResource(R.string.record_battery_warning_body),
+        actionLabel = stringResource(R.string.record_battery_fix),
+        onAction = onFixBattery,
+    )
+}
+
+@Composable
+private fun WarningCard(
+    icon: ImageVector,
+    title: String,
+    body: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+    secondaryLabel: String? = null,
+    onSecondary: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+            Text(
+                body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(actionLabel)
+                }
+                if (secondaryLabel != null && onSecondary != null) {
+                    OutlinedButton(onClick = onSecondary, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(secondaryLabel)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StopConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.record_stop_confirm_title)) },
+        text = { Text(stringResource(R.string.record_stop_confirm_body)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.record_stop_confirm_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.record_stop_confirm_dismiss))
+            }
+        },
+    )
+}

@@ -9,4 +9,90 @@
     <string name="recording_notification_paused">Trailog · paused</string>
     <!-- %1$s elapsed, %2$d fixes this run, %3$s accuracy in metres. -->
     <string name="recording_notification_text">%1$s · %2$d fixes · acc %3$s m</string>
+
+    <!-- Bottom navigation. -->
+    <string name="nav_record">Record</string>
+    <string name="nav_history">History</string>
+    <string name="nav_sensors">Sensors</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_activity_detail">Activity detail</string>
+
+    <!-- Activity types. -->
+    <string name="activity_type_cycling">Cycling</string>
+    <string name="activity_type_mountain_biking">Mountain biking</string>
+    <string name="activity_type_running">Running</string>
+    <string name="activity_type_hiking">Hiking</string>
+    <string name="activity_type_walking">Walking</string>
+
+    <!-- Record screen — controls. -->
+    <string name="record_title">Record</string>
+    <string name="record_activity_type">Activity type</string>
+    <string name="record_start">Start recording</string>
+    <string name="record_pause">Pause</string>
+    <string name="record_resume">Resume</string>
+    <string name="record_stop">Stop</string>
+    <string name="record_saving">Saving activity…</string>
+
+    <!-- Record screen — live stats labels. -->
+    <string name="record_stat_elapsed">Elapsed</string>
+    <string name="record_stat_moving">Moving</string>
+    <string name="record_stat_distance">Distance</string>
+    <string name="record_stat_speed">Speed</string>
+    <string name="record_stat_elevation_gain">Elevation gain</string>
+    <string name="record_stat_placeholder">—</string>
+
+    <!-- Record screen — map / live trace. -->
+    <string name="record_map_recenter">Re-centre</string>
+    <string name="record_map_recenter_cd">Re-centre the map on your position</string>
+    <string name="record_trace_empty">Waiting for your first GPS fix…</string>
+
+    <!-- Record screen — ready / idle. -->
+    <string name="record_ready_hint">Ready to record. Pick an activity type and start.</string>
+
+    <!-- Record screen — permissions. -->
+    <string name="record_permissions_missing_title">Location permission needed</string>
+    <string name="record_permissions_missing_body">Trailog records your route using GPS, so it
+        needs location access before it can start. No location data ever leaves your control.</string>
+    <string name="record_permission_fine">Precise location</string>
+    <string name="record_permission_background">Location “Allow all the time”</string>
+    <string name="record_permission_notifications">Notifications</string>
+    <string name="record_permission_granted">granted</string>
+    <string name="record_permission_denied">not granted</string>
+    <string name="record_grant_foreground">Grant location &amp; notifications</string>
+    <string name="record_request_background">Set location to “Allow all the time”</string>
+    <string name="record_open_settings">Open app settings</string>
+    <string name="record_background_rationale">“Allow all the time” is what lets Trailog pick your
+        recording back up after a phone restart. Without it, a reboot mid-ride cannot resume
+        recording. Grant it in system settings under Location.</string>
+    <string name="record_notifications_rationale">Android needs notification permission to show the
+        ongoing recording notification the tracker runs behind.</string>
+
+    <!-- Record screen — battery optimisation. -->
+    <string name="record_battery_warning_title">Battery optimisation is on</string>
+    <string name="record_battery_warning_body">Your phone may kill recording in the background to
+        save power. Exempt Trailog from battery optimisation so long rides record to the end.</string>
+    <string name="record_battery_fix">Exempt Trailog</string>
+
+    <!-- Record screen — stop confirmation. -->
+    <string name="record_stop_confirm_title">Stop recording?</string>
+    <string name="record_stop_confirm_body">This finishes and saves the activity. An accidental
+        stop loses a ride.</string>
+    <string name="record_stop_confirm_confirm">Stop &amp; save</string>
+    <string name="record_stop_confirm_dismiss">Keep recording</string>
+
+    <!-- Record screen — interrupted-session recovery. -->
+    <string name="record_interrupted_title">Interrupted activity found</string>
+    <!-- %1$s is a coarse gap length, e.g. "42m" or "2h 10m". -->
+    <string name="record_interrupted_body">Recording was interrupted %1$s ago. Resume it into a
+        new segment, or finish and save what was recorded.</string>
+    <string name="record_interrupted_resume">Resume</string>
+    <string name="record_interrupted_finish">Finish &amp; save</string>
+    <!-- %1$s is a coarse gap length. Shown when recovery resumed automatically after a short gap. -->
+    <string name="record_recovery_auto_resumed">Recording resumed after a %1$s gap, in a new
+        segment.</string>
+
+    <!-- Placeholder tabs not yet built (History, Sensors, Settings arrive later in M1.5). -->
+    <string name="placeholder_coming_soon">Coming soon</string>
+    <!-- %1$s is the screen name. -->
+    <string name="placeholder_screen_pending">The %1$s screen is being built.</string>
 </resources>

@@ -38,6 +38,24 @@ class ActivityRepository(
     fun statsFlow(activityId: String): Flow<ActivityStatsEntity?> = stats.byIdFlow(activityId)
 
     /**
+     * Load an activity as a platform-free domain [Activity] — its metadata plus every raw point
+     * in time order. Returns null when no such activity exists.
+     *
+     * This is the single place raw points are read into the domain, so the Record screen's live
+     * stats, the detail screen, and [recompute] all segment and compute through the one `:core`
+     * [Statistics] path — a figure can never be computed two different ways (CLAUDE.md).
+     */
+    suspend fun loadActivity(activityId: String): Activity? {
+        val activity = activities.byId(activityId) ?: return null
+        return Activity(
+            id = UUID.fromString(activity.id),
+            type = ActivityType.valueOf(activity.type),
+            name = activity.name,
+            points = points.pointsFor(activityId).map { it.toDomain() },
+        )
+    }
+
+    /**
      * Recompute one activity's derived statistics from its raw points and overwrite the cache
      * row. Returns false (and touches nothing) when no such activity exists.
      *
@@ -45,13 +63,7 @@ class ActivityRepository(
      * result is fully segment-aware — nothing is interpolated across a gap between segments.
      */
     suspend fun recompute(activityId: String): Boolean {
-        val activity = activities.byId(activityId) ?: return false
-        val domain = Activity(
-            id = UUID.fromString(activity.id),
-            type = ActivityType.valueOf(activity.type),
-            name = activity.name,
-            points = points.pointsFor(activityId).map { it.toDomain() },
-        )
+        val domain = loadActivity(activityId) ?: return false
         stats.upsert(Statistics.compute(domain).toEntity(activityId, now()))
         return true
     }
