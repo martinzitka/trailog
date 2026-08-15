@@ -4,8 +4,11 @@ import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.core.model.RawPoint
 import io.github.martinzitka.trailog.core.recording.RecordingSession
 import io.github.martinzitka.trailog.core.recording.RecordingState
+import io.github.martinzitka.trailog.core.stats.ActivityStats
 import kotlinx.datetime.Instant
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.DurationUnit
 
 /**
  * Mapping between the Room entities (`:app`) and the platform-free domain types (`:core`).
@@ -61,4 +64,37 @@ fun RecordingSession.toEntity(): RecordingSessionEntity =
         startTime = startTime.toEpochMilliseconds(),
         currentSegmentIndex = currentSegmentIndex,
         heartbeat = heartbeat?.toEpochMilliseconds(),
+    )
+
+/**
+ * Serialise computed [ActivityStats] into its cache row. Durations are stored as whole millis;
+ * the sub-millisecond loss is irrelevant to any displayed figure and the row is a recomputable
+ * cache regardless.
+ */
+fun ActivityStats.toEntity(activityId: String, computedAt: Long): ActivityStatsEntity =
+    ActivityStatsEntity(
+        activityId = activityId,
+        distance = distance,
+        elapsedTime = elapsedTime.toLong(DurationUnit.MILLISECONDS),
+        movingTime = movingTime.toLong(DurationUnit.MILLISECONDS),
+        averageSpeed = averageSpeed,
+        maxSpeed = maxSpeed,
+        elevationGain = elevationGain,
+        elevationLoss = elevationLoss,
+        segmentCount = segmentCount,
+        pointCount = pointCount,
+        computedAt = computedAt,
+    )
+
+fun ActivityStatsEntity.toDomain(): ActivityStats =
+    ActivityStats(
+        distance = distance,
+        elapsedTime = elapsedTime.milliseconds,
+        movingTime = movingTime.milliseconds,
+        averageSpeed = averageSpeed,
+        maxSpeed = maxSpeed,
+        elevationGain = elevationGain,
+        elevationLoss = elevationLoss,
+        segmentCount = segmentCount,
+        pointCount = pointCount,
     )

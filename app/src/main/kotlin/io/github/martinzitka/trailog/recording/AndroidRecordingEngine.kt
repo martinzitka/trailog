@@ -12,6 +12,8 @@ import io.github.martinzitka.trailog.core.recording.RecordingSession
 import io.github.martinzitka.trailog.core.recording.RecordingState
 import io.github.martinzitka.trailog.core.recording.RecoveryDecision
 import io.github.martinzitka.trailog.core.recording.RecoveryPolicy
+import io.github.martinzitka.trailog.data.ActivityEntity
+import io.github.martinzitka.trailog.data.ActivityRepository
 import io.github.martinzitka.trailog.data.TrailogDatabase
 import io.github.martinzitka.trailog.data.toDomain
 import io.github.martinzitka.trailog.data.toEntity
@@ -48,6 +50,8 @@ class AndroidRecordingEngine private constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val points = db.rawPointDao()
     private val sessions = db.recordingSessionDao()
+    private val activities = db.activityDao()
+    private val repository = ActivityRepository(db)
 
     private val _session = MutableStateFlow<RecordingSession?>(null)
     override val session: StateFlow<RecordingSession?> = _session.asStateFlow()
@@ -80,6 +84,23 @@ class AndroidRecordingEngine private constructor(
         val now = Clock.System.now()
         val fresh = RecordingSession.start(Uuid7.generate(now.toEpochMilliseconds()), type, now)
         persist(fresh)
+        // The activity's metadata row exists from the first moment of recording; its stats
+        // cache is filled by the recompute path when the activity is finalised. The name is
+        // empty until the user sets one (a display name is derived at the render edge).
+        val startMillis = now.toEpochMilliseconds()
+        scope.launch {
+            activities.upsert(
+                ActivityEntity(
+                    id = fresh.activityId.toString(),
+                    type = type.name,
+                    name = "",
+                    notes = null,
+                    startTime = startMillis,
+                    createdAt = startMillis,
+                    updatedAt = startMillis,
+                ),
+            )
+        }
         Log.i(TAG, "start: new session, type=$type")
         RecordingForegroundService.start(appContext)
     }
@@ -108,7 +129,12 @@ class AndroidRecordingEngine private constructor(
         // Validates STOPPING/RECOVERING -> IDLE; throws for anything else.
         current.apply(RecordingCommand.FINALIZE)
         _session.value = null
-        scope.launch { sessions.delete(current.activityId.toString()) }
+        val activityId = current.activityId.toString()
+        scope.launch {
+            sessions.delete(activityId)
+            // Fill the stats cache from the raw points now the activity is complete.
+            repository.recompute(activityId)
+        }
         Log.i(TAG, "finalize: session cleared")
         RecordingForegroundService.stop(appContext)
     }
@@ -212,6 +238,8 @@ class AndroidRecordingEngine private constructor(
                 RecoveryDecision.FinalizeAutomatically -> {
                     _session.value = null
                     sessions.delete(persisted.activityId.toString())
+                    // The activity still recorded points; fill its stats cache from them.
+                    repository.recompute(persisted.activityId.toString())
                 }
             }
             startupRecoveryDone = true

@@ -1,0 +1,69 @@
+package io.github.martinzitka.trailog.data
+
+import io.github.martinzitka.trailog.core.model.Activity
+import io.github.martinzitka.trailog.core.model.ActivityType
+import io.github.martinzitka.trailog.core.stats.Statistics
+import kotlinx.coroutines.flow.Flow
+import java.util.UUID
+
+/**
+ * The read/write surface over activities and their derived statistics, and the home of the
+ * **recompute path** M1.4 requires: rebuilding the [ActivityStatsEntity] cache from raw points
+ * via the single `:core` [Statistics] implementation.
+ *
+ * This path is why raw points are immutable and sacred (CLAUDE.md): the cache is disposable,
+ * and every displayed number is a recomputable view over the raw fixes. When a statistics
+ * algorithm improves or a bug is fixed, [recomputeAll] rebuilds every activity's numbers from
+ * the fixes that were preserved exactly as the OS delivered them.
+ *
+ * No coordinates are ever logged here (nothing is logged here); statistics carry none anyway.
+ */
+class ActivityRepository(
+    private val activities: ActivityDao,
+    private val points: RawPointDao,
+    private val stats: ActivityStatsDao,
+    private val now: () -> Long,
+) {
+    constructor(db: TrailogDatabase, now: () -> Long = { System.currentTimeMillis() }) : this(
+        activities = db.activityDao(),
+        points = db.rawPointDao(),
+        stats = db.activityStatsDao(),
+        now = now,
+    )
+
+    /** All activities, most recent first. Backing flow for the History screen (M1.5). */
+    fun activitiesByRecency(): Flow<List<ActivityEntity>> = activities.allByStartTimeDesc()
+
+    /** An activity's cached stats, observed. Null until the first recompute. */
+    fun statsFlow(activityId: String): Flow<ActivityStatsEntity?> = stats.byIdFlow(activityId)
+
+    /**
+     * Recompute one activity's derived statistics from its raw points and overwrite the cache
+     * row. Returns false (and touches nothing) when no such activity exists.
+     *
+     * The raw points are read in time order and grouped into segments by [Statistics], so the
+     * result is fully segment-aware — nothing is interpolated across a gap between segments.
+     */
+    suspend fun recompute(activityId: String): Boolean {
+        val activity = activities.byId(activityId) ?: return false
+        val domain = Activity(
+            id = UUID.fromString(activity.id),
+            type = ActivityType.valueOf(activity.type),
+            name = activity.name,
+            points = points.pointsFor(activityId).map { it.toDomain() },
+        )
+        stats.upsert(Statistics.compute(domain).toEntity(activityId, now()))
+        return true
+    }
+
+    /**
+     * Recompute every activity's statistics from raw points. This is the "recompute all derived
+     * data from raw points" path: run it after an algorithm change to rebuild the whole cache.
+     * Returns the number of activities recomputed.
+     */
+    suspend fun recomputeAll(): Int {
+        val ids = activities.allIds()
+        for (id in ids) recompute(id)
+        return ids.size
+    }
+}

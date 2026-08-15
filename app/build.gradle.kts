@@ -45,6 +45,12 @@ android {
         compose = true
     }
 
+    testOptions {
+        // Robolectric drives real SQLite in JVM unit tests, so Room migration and recompute
+        // tests run on `./gradlew check` / CI without an emulator.
+        unitTests.isIncludeAndroidResources = true
+    }
+
     lint {
         warningsAsErrors = false
         // "A newer version exists" nags — dependency freshness is Renovate's job, not the
@@ -83,4 +89,15 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
+    testImplementation(libs.junit4)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.kotlinx.coroutines.test)
+}
+
+// Room schema JSON is exported here and committed; migration tests validate against it and it
+// records the schema history (CLAUDE.md: migrations forward-only, checked in).
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
