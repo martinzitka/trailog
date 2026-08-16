@@ -30,6 +30,22 @@ interface RawPointDao {
     @Query("SELECT * FROM raw_points WHERE activityId = :activityId ORDER BY time ASC")
     suspend fun pointsFor(activityId: String): List<RawPointEntity>
 
+    /**
+     * Drop every fix of one activity. The **only** deletion path for raw points, and it exists
+     * solely to serve an explicit user delete of the whole activity.
+     *
+     * "Raw points are immutable and sacred" (CLAUDE.md) constrains the app, not the user: nothing
+     * automatic — no filter, no recompute, no migration — may reach this. But when the user
+     * deletes a ride, the fixes must go with it. Leaving orphaned coordinates behind would keep
+     * location history the user believes they erased, which is the opposite of this project's
+     * point and is not defensible under GDPR either.
+     *
+     * There is no foreign key from `raw_points` to `activities` (points predate that table and
+     * survive independently of it), so this is called explicitly rather than cascading.
+     */
+    @Query("DELETE FROM raw_points WHERE activityId = :activityId")
+    suspend fun deleteFor(activityId: String)
+
     /** The activity id of the most recently recorded fix, or null if nothing was ever recorded. */
     @Query("SELECT activityId FROM raw_points ORDER BY time DESC LIMIT 1")
     suspend fun latestActivityId(): String?

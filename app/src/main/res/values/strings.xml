@@ -110,6 +110,80 @@
     <!-- Shown in place of a figure whose statistics have not been computed yet. -->
     <string name="history_stat_pending">—</string>
 
+    <!-- Activity detail — chrome. -->
+    <string name="detail_loading">Loading activity…</string>
+    <string name="detail_back">Back</string>
+    <string name="detail_gone_title">Activity deleted</string>
+    <string name="detail_gone_body">This activity and its recorded points are gone.</string>
+    <string name="detail_gone_action">Back to History</string>
+    <!-- Shown while the statistics cache is being rebuilt; figures are computed live meanwhile. -->
+    <string name="detail_stats_pending">Figures computed from raw points — the cache is still
+        being rebuilt.</string>
+
+    <!-- Activity detail — map. -->
+    <string name="detail_map_cd">Map of the recorded route</string>
+    <string name="detail_map_empty">This activity has no recorded positions.</string>
+
+    <!-- Activity detail — summary figures. -->
+    <string name="detail_summary_title">Summary</string>
+    <string name="detail_stat_distance">Distance</string>
+    <string name="detail_stat_elapsed">Elapsed time</string>
+    <string name="detail_stat_moving">Moving time</string>
+    <string name="detail_stat_elevation_gain">Elevation gain</string>
+    <string name="detail_stat_elevation_loss">Elevation loss</string>
+    <string name="detail_stat_average_speed">Average speed</string>
+    <string name="detail_stat_max_speed">Max speed</string>
+    <!-- %1$d is a count of recording segments; more than one means the recording had gaps. -->
+    <plurals name="detail_segment_note">
+        <item quantity="one">Recorded in one unbroken segment.</item>
+        <item quantity="other">Recorded in %1$d segments — gaps are shown as breaks, never joined
+            by a straight line.</item>
+    </plurals>
+
+    <!-- Activity detail — charts. -->
+    <string name="detail_chart_elevation">Elevation</string>
+    <string name="detail_chart_speed">Speed</string>
+    <string name="detail_chart_elevation_cd">Elevation profile against distance</string>
+    <string name="detail_chart_speed_cd">Speed profile against distance</string>
+    <string name="detail_chart_no_elevation">No altitude was recorded for this activity.</string>
+    <string name="detail_chart_no_speed">Not enough fixes to plot a speed profile.</string>
+
+    <!-- Activity detail — splits table. -->
+    <string name="detail_splits_title">Per-kilometre splits</string>
+    <string name="detail_splits_empty">Too short to split.</string>
+    <string name="detail_splits_column_split">km</string>
+    <string name="detail_splits_column_time">Time</string>
+    <string name="detail_splits_column_speed">Speed</string>
+    <string name="detail_splits_column_gain">Gain</string>
+    <!-- %1$d is the split number, e.g. the 3rd kilometre. -->
+    <string name="detail_splits_row_cd">Kilometre %1$d</string>
+    <!-- Marks a final split shorter than a full kilometre; %1$s is its real length. -->
+    <string name="detail_splits_partial">%1$s</string>
+
+    <!-- Activity detail — editing. -->
+    <string name="detail_edit">Edit activity</string>
+    <string name="detail_edit_title">Edit activity</string>
+    <string name="detail_edit_name">Name</string>
+    <string name="detail_edit_notes">Notes</string>
+    <string name="detail_edit_type">Activity type</string>
+    <string name="detail_edit_save">Save</string>
+    <string name="detail_edit_cancel">Cancel</string>
+
+    <!-- Activity detail — delete. -->
+    <string name="detail_delete">Delete activity</string>
+    <string name="detail_delete_confirm_title">Delete this activity?</string>
+    <string name="detail_delete_confirm_body">The route, its statistics and every recorded GPS
+        point are erased from this phone. This cannot be undone — export it first if you want to
+        keep it.</string>
+    <string name="detail_delete_confirm_confirm">Delete</string>
+    <string name="detail_delete_confirm_dismiss">Keep</string>
+
+    <!-- Activity detail — export. -->
+    <string name="detail_export">Export</string>
+    <string name="detail_export_gpx">Export as GPX</string>
+    <string name="detail_export_done">Activity exported.</string>
+    <string name="detail_export_failed">Couldn’t write the export file.</string>
+
     <!-- Placeholder tabs not yet built (Sensors and Settings arrive later in M1.5). -->
     <string name="placeholder_coming_soon">Coming soon</string>
     <!-- %1$s is the screen name. -->

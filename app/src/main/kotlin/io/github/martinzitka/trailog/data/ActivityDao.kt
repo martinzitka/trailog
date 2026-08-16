@@ -16,6 +16,31 @@ interface ActivityDao {
     @Query("SELECT * FROM activities WHERE id = :id")
     suspend fun byId(id: String): ActivityEntity?
 
+    /**
+     * One activity with its cached statistics, observed — the Activity detail screen's backing
+     * flow. Emits null once the activity is deleted, which is how the screen learns to leave.
+     */
+    @Transaction
+    @Query("SELECT * FROM activities WHERE id = :id")
+    fun withStatsByIdFlow(id: String): Flow<ActivityWithStats?>
+
+    /**
+     * Update only the user-editable metadata (CLAUDE.md's sync model: name, notes and type are
+     * the mutable fields, last-write-wins on `updatedAt`). Deliberately not an upsert of the whole
+     * row — `startTime` and `createdAt` describe when the recording happened and are not editable.
+     */
+    @Query(
+        "UPDATE activities SET name = :name, notes = :notes, type = :type, updatedAt = :updatedAt " +
+            "WHERE id = :id",
+    )
+    suspend fun updateMetadata(
+        id: String,
+        name: String,
+        notes: String?,
+        type: String,
+        updatedAt: Long,
+    )
+
     /** Every activity id — drives the recompute-all sweep. */
     @Query("SELECT id FROM activities")
     suspend fun allIds(): List<String>

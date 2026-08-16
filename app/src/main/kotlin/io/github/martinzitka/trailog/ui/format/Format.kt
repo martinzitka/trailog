@@ -76,6 +76,45 @@ object Format {
     fun date(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
         DATE.withZone(zone).format(Instant.ofEpochMilli(epochMillis))
 
+    /**
+     * A local date and time for an epoch-millis instant, medium/short style in the device locale.
+     * Used where the time of day matters — an activity's header, where two rides on one day need
+     * telling apart.
+     */
+    fun dateTime(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
+        DATE_TIME.withZone(zone).format(Instant.ofEpochMilli(epochMillis))
+
+    /**
+     * The suggested file name for an export, e.g. `trailog-cycling-2026-08-16-0742.gpx`.
+     *
+     * Deliberately locale-neutral and sortable rather than localised: it is a file name a user
+     * will scroll past in a file manager or hand to another tool, not prose. [slug] is lowercased
+     * and stripped of anything a file system might object to.
+     */
+    fun exportFileName(
+        slug: String,
+        epochMillis: Long,
+        extension: String,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): String {
+        val stamp = FILE_STAMP.withZone(zone).format(Instant.ofEpochMilli(epochMillis))
+        val safe = slug.lowercase(Locale.ROOT).replace(UNSAFE_FILE_CHARS, "-").trim('-')
+        return if (safe.isEmpty()) {
+            "trailog-$stamp.$extension"
+        } else {
+            "trailog-$safe-$stamp.$extension"
+        }
+    }
+
     private val DATE: DateTimeFormatter =
         DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+
+    private val DATE_TIME: DateTimeFormatter =
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+
+    private val FILE_STAMP: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm", Locale.ROOT)
+
+    /** Anything outside a-z, 0-9 becomes a hyphen, so the name is safe on any file system. */
+    private val UNSAFE_FILE_CHARS = Regex("[^a-z0-9]+")
 }

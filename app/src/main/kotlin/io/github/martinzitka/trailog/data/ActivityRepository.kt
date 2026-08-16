@@ -1,5 +1,6 @@
 package io.github.martinzitka.trailog.data
 
+import androidx.room.withTransaction
 import io.github.martinzitka.trailog.core.model.Activity
 import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.core.stats.Statistics
@@ -23,12 +24,14 @@ class ActivityRepository(
     private val points: RawPointDao,
     private val stats: ActivityStatsDao,
     private val now: () -> Long,
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     constructor(db: TrailogDatabase, now: () -> Long = { System.currentTimeMillis() }) : this(
         activities = db.activityDao(),
         points = db.rawPointDao(),
         stats = db.activityStatsDao(),
         now = now,
+        inTransaction = { block -> db.withTransaction(block) },
     )
 
     /** All activities, most recent first. */
@@ -44,6 +47,60 @@ class ActivityRepository(
 
     /** An activity's cached stats, observed. Null until the first recompute. */
     fun statsFlow(activityId: String): Flow<ActivityStatsEntity?> = stats.byIdFlow(activityId)
+
+    /**
+     * One activity with its cached statistics, observed — the Activity detail screen's backing
+     * flow. Emits null when the activity does not exist, including after it is deleted, which is
+     * how the detail screen learns that it should navigate away.
+     */
+    fun activityWithStatsFlow(activityId: String): Flow<ActivityWithStats?> =
+        activities.withStatsByIdFlow(activityId)
+
+    /**
+     * Edit an activity's user-owned metadata. These three fields plus visibility are the *only*
+     * mutable parts of an activity (CLAUDE.md's sync model); `updatedAt` is stamped here because
+     * it is the last-write-wins tie-breaker the future sync protocol resolves on.
+     *
+     * Nothing derived is touched: the type feeds the moving-time threshold, so the cached stats
+     * are now stale, and [recompute] is called to rebuild them from the raw points rather than
+     * adjusting the cache in place.
+     */
+    suspend fun updateMetadata(
+        activityId: String,
+        name: String,
+        notes: String?,
+        type: ActivityType,
+    ) {
+        activities.updateMetadata(
+            id = activityId,
+            name = name,
+            notes = notes?.takeIf { it.isNotBlank() },
+            type = type.name,
+            updatedAt = now(),
+        )
+        recompute(activityId)
+    }
+
+    /**
+     * Delete an activity outright: its metadata, its cached statistics and **its raw points**.
+     * Returns false and touches nothing when no such activity exists.
+     *
+     * This is the one path that removes raw points, and only ever at the user's explicit request
+     * (the detail screen confirms first). "Raw points are immutable and sacred" binds the app, not
+     * the person whose location history it is — keeping the fixes of a ride the user deleted would
+     * mean holding coordinates they believe are gone. All three deletes run in one transaction so
+     * a crash mid-delete cannot leave an activity without its points or points without an activity.
+     */
+    suspend fun delete(activityId: String): Boolean {
+        if (activities.byId(activityId) == null) return false
+        inTransaction {
+            // Stats cascade from the activity row's foreign key; points have no FK and go first
+            // so no window exists where the activity is gone but its coordinates remain.
+            points.deleteFor(activityId)
+            activities.delete(activityId)
+        }
+        return true
+    }
 
     /**
      * Load an activity as a platform-free domain [Activity] — its metadata plus every raw point

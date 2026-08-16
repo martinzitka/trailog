@@ -22,6 +22,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import io.github.martinzitka.trailog.ui.detail.ActivityDetailScreen
+import io.github.martinzitka.trailog.ui.detail.ActivityDetailViewModel
 import io.github.martinzitka.trailog.ui.history.HistoryScreen
 import io.github.martinzitka.trailog.ui.history.HistoryViewModel
 import io.github.martinzitka.trailog.ui.record.RecordScreen
@@ -108,9 +109,13 @@ fun TrailogApp() {
                     route = Routes.ACTIVITY_DETAIL,
                     arguments = listOf(navArgument(Routes.ARG_ACTIVITY_ID) { type = NavType.StringType }),
                 ) { entry ->
+                    val context = LocalContext.current
                     val activityId = entry.arguments?.getString(Routes.ARG_ACTIVITY_ID).orEmpty()
+                    val detailViewModel: ActivityDetailViewModel = viewModel(
+                        factory = ActivityDetailViewModel.Factory(context, activityId),
+                    )
                     ActivityDetailScreen(
-                        activityId = activityId,
+                        viewModel = detailViewModel,
                         onBack = { navController.popBackStack() },
                         modifier = Modifier.fillMaxSize(),
                     )
