@@ -105,6 +105,37 @@ class ActivityRepositoryTest {
         assertNotNull(db.activityStatsDao().byId(ID_B))
     }
 
+    @Test
+    fun recomputeMissing_fillsTheGaps_andLeavesCachedActivitiesAlone() = runTest {
+        db.activityDao().upsert(activity(ID_A))
+        db.activityDao().upsert(activity(ID_B))
+        insert(ID_A, segment = 0, time = 1_000, lat = 50.0, lon = 14.0)
+        insert(ID_A, segment = 0, time = 2_000, lat = 50.0, lon = 14.0014)
+        insert(ID_B, segment = 0, time = 1_000, lat = 49.0, lon = 16.0)
+        insert(ID_B, segment = 0, time = 2_000, lat = 49.0, lon = 16.0014)
+
+        // A is already cached; B stands in for a migration-backfilled activity with no stats.
+        repository.recompute(ID_A)
+        val cachedA = db.activityStatsDao().byId(ID_A)!!
+        // A grows a third fix. A recompute of A would notice; the backfill must not touch it.
+        insert(ID_A, segment = 0, time = 3_000, lat = 50.0, lon = 14.0028)
+
+        assertEquals(1, repository.recomputeMissing())
+
+        assertNotNull(db.activityStatsDao().byId(ID_B))
+        assertEquals(cachedA.distance, db.activityStatsDao().byId(ID_A)!!.distance, 1e-9)
+        assertEquals(2, db.activityStatsDao().byId(ID_A)!!.pointCount)
+    }
+
+    @Test
+    fun recomputeMissing_doesNothing_whenEveryActivityIsCached() = runTest {
+        db.activityDao().upsert(activity(ID_A))
+        insert(ID_A, segment = 0, time = 1_000, lat = 50.0, lon = 14.0)
+        repository.recompute(ID_A)
+
+        assertEquals(0, repository.recomputeMissing())
+    }
+
     private fun activity(id: String) = ActivityEntity(
         id = id,
         type = "CYCLING",

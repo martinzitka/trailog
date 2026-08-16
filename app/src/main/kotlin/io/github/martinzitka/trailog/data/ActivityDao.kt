@@ -20,6 +20,18 @@ interface ActivityDao {
     @Query("SELECT id FROM activities")
     suspend fun allIds(): List<String>
 
+    /**
+     * Ids of activities that have no cached statistics row yet — the backfill worklist. This is
+     * non-empty after the 1 → 2 migration, which created `activities` rows for recordings made
+     * before that table existed and left their statistics to be computed later.
+     */
+    @Query(
+        "SELECT a.id FROM activities a " +
+            "LEFT JOIN activity_stats s ON s.activityId = a.id " +
+            "WHERE s.activityId IS NULL",
+    )
+    suspend fun idsWithoutStats(): List<String>
+
     /** All activities, most recent first — the History list. */
     @Query("SELECT * FROM activities ORDER BY startTime DESC")
     fun allByStartTimeDesc(): Flow<List<ActivityEntity>>

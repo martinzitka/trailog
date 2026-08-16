@@ -77,6 +77,23 @@ class ActivityRepository(
     }
 
     /**
+     * Recompute the activities that have **no** cached statistics yet, and return how many were
+     * rebuilt. Activities whose cache already exists are left alone.
+     *
+     * This is the backfill for recordings whose metadata row predates the statistics cache — the
+     * ones the 1 → 2 migration created from raw points. Without it their figures would stay
+     * pending forever, because [recompute] otherwise only runs when an activity is finalised.
+     *
+     * Cheap when there is nothing to do: one query returning no rows. It is *not* the path for an
+     * algorithm change — that is [recomputeAll], which rebuilds caches that already exist.
+     */
+    suspend fun recomputeMissing(): Int {
+        val ids = activities.idsWithoutStats()
+        for (id in ids) recompute(id)
+        return ids.size
+    }
+
+    /**
      * Recompute every activity's statistics from raw points. This is the "recompute all derived
      * data from raw points" path: run it after an algorithm change to rebuild the whole cache.
      * Returns the number of activities recomputed.
