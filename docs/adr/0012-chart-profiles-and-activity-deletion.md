@@ -38,18 +38,49 @@ The M1.5 Activity detail screen needs three things the project had no position o
   absent on some fixes and derived differently by different providers, which would make the
   chart's shape depend on the handset.
 
-### Downsampling preserves the envelope
+### Downsampling: buckets divide the distance axis, and collapse differently per quantity
 
-A series is reduced to at most ~800 samples before it reaches the screen. The reduction cuts
-each segment into buckets and emits **each bucket's minimum and maximum**, in order.
+A series is reduced to at most ~800 samples before it reaches the screen. Three decisions
+inside that, all of which were **corrected by testing against real rides on the device** — the
+first version of each looked fine in unit tests and was unusable on a real 67 km recording.
 
-Plain stride sampling was rejected: it clips peaks, so the summit of a climb or the top of a
-sprint disappears whenever it falls between strides — the chart would then contradict the
-"max speed" and "elevation gain" figures next to it. The envelope method keeps every extreme
-as an emitted sample at a fraction of the cost.
+**Buckets divide the distance axis, not the sample list.** The x-axis is distance, but fixes
+arrive on a clock. A rider stopped at a junction for ten minutes produces ~600 fixes occupying
+almost no x-width — and because GPS wanders while stationary, occupying a *little*. Bucketing
+by sample index handed each standstill a large share of the budget crammed into a few pixels,
+drawn as a dense vertical stripe. Bucketing by distance gives a standstill the one bucket its
+distance earns.
 
-This is a **rendering** concern only. No statistic is ever computed from a downsampled series;
+**Elevation keeps each bucket's extremes; speed keeps each bucket's mean.** Stride sampling is
+wrong for both — it clips peaks, so a summit vanishes whenever it lands between strides. But
+an *envelope* is only right where the signal exceeds the noise. Applied to GPS-derived speed it
+plotted the noise band: a solid block between a standstill and the fastest wobble, with no
+trend visible. Speed therefore averages within the bucket; the peak the reader wants is already
+printed as the max-speed figure.
+
+**A smoothing window only helps if it is wider than the chart's output resolution.** This was
+the least obvious finding. At 800 samples over a 67 km ride, adjacent plotted samples are ~85 m
+— about 15 s — apart, so the original 15-point (15 s) moving average smoothed almost nothing
+that survived to the screen. Widening it to 61 points roughly halves the jaggedness of the
+drawn line, measured as the mean step between adjacent plotted samples:
+
+| ride | window 15 | window 61 |
+|---|---|---|
+| 67.6 km / 6h45 | 3.27 km/h | 1.77 km/h |
+| 38.5 km / 3h45 | 2.10 km/h | 0.97 km/h |
+| 14.3 km / 39 min | 0.91 km/h | 0.36 km/h |
+
+Coarsening the sample budget instead was measured and rejected: it makes the line *more*
+jagged, because each remaining step then spans more ground.
+
+This is all a **rendering** concern. No statistic is ever computed from a downsampled series;
 `Statistics` always reads every raw point.
+
+A consequence worth stating: the smoothed speed curve peaks below the summary's max-speed
+figure (32 km/h against 69 km/h on the reference ride). Both are honest — one is a minute-scale
+trend, the other an instantaneous maximum over two fixes — but the max-speed statistic is
+itself unfiltered and CLAUDE.md already flags it as provisional until the filtering pipeline
+lands. Revisit the pairing then.
 
 ### Deleting an activity deletes its raw points
 

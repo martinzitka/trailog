@@ -47,6 +47,26 @@ class TrackProfileTest {
         )
     }
 
+    /**
+     * A ride that alternates a fast second with a slow one, at 1 Hz. Hop lengths alternate
+     * between ~3.6 m and ~14.3 m at 50°N, so the derived speed swings between roughly 3.6 and
+     * 14.3 m/s around a ~9 m/s mean — the noise-dominated shape real GPS speed has.
+     */
+    private fun alternatingPaceRide(count: Int): List<RawPoint> {
+        var lon = 14.0
+        return (0 until count).map { i ->
+            if (i > 0) lon += if (i % 2 == 0) 0.00005 else 0.0002
+            RawPoint(
+                latitude = 50.0,
+                longitude = lon,
+                altitude = null,
+                accuracy = null,
+                time = Instant.fromEpochSeconds(i.toLong()),
+                segmentIndex = 0,
+            )
+        }
+    }
+
     // ---- segment awareness -----------------------------------------------------------------
 
     @Test
@@ -299,6 +319,64 @@ class TrackProfileTest {
             profile.segments[1].size >= 2,
             "the short segment must keep at least two samples, had ${profile.segments[1].size}",
         )
+    }
+
+    @Test
+    fun `speed downsampling plots the trend, not a band between its extremes`() {
+        // A rider alternating hard and easy every second — the shape of real 1 Hz GPS speed,
+        // where the noise is larger than the trend. Reducing this by keeping each bucket's
+        // minimum and maximum fills the chart with a solid floor-to-ceiling band; averaging
+        // within the bucket shows the ~8 m/s the ride was actually done at.
+        val points = alternatingPaceRide(3_000)
+        val segments = Segment.segmentsOf(points)
+
+        val raw = TrackProfile.speed(segments, smoothingWindow = 1, maxSamples = 4_000)
+        val reduced = TrackProfile.speed(segments, smoothingWindow = 1, maxSamples = 100)
+
+        val rawSpread = raw.maxValue!! - raw.minValue!!
+        val reducedSpread = reduced.maxValue!! - reduced.minValue!!
+
+        assertTrue(rawSpread > 5.0, "the raw series must really be noisy, spread was $rawSpread")
+        assertTrue(
+            reducedSpread < rawSpread / 4,
+            "a reduced speed series must show the trend: spread $reducedSpread " +
+                "should be far under the raw $rawSpread",
+        )
+        // And the trend it shows is the actual average pace, not one of the extremes.
+        val mean = (raw.maxValue!! + raw.minValue!!) / 2
+        assertEquals(mean, reduced.maxValue!!, 1.0)
+    }
+
+    @Test
+    fun `elevation downsampling still keeps extremes that speed deliberately averages away`() {
+        // The same noisy input, read as altitude. Elevation keeps its envelope — the two
+        // reductions are chosen per quantity, not globally.
+        val altitudes = { i: Int -> if (i % 2 == 0) 300.0 else 340.0 }
+        val points = line(3_000, altitudeAt = altitudes)
+
+        val profile = TrackProfile.elevation(
+            Segment.segmentsOf(points),
+            params = ElevationParams(smoothingWindow = 1),
+            maxSamples = 100,
+        )
+
+        assertEquals(340.0, profile.maxValue!!, 1e-9)
+        assertEquals(300.0, profile.minValue!!, 1e-9)
+    }
+
+    @Test
+    fun `a mean-reduced speed series still spans the whole track`() {
+        val points = alternatingPaceRide(3_000)
+        val segments = Segment.segmentsOf(points)
+
+        val profile = TrackProfile.speed(segments, maxSamples = 200)
+        val samples = profile.segments.single()
+
+        assertEquals(0.0, samples.first().distance, 1e-9)
+        assertEquals(Statistics.distance(segments), samples.last().distance, 1e-6)
+        samples.zipWithNext { a, b ->
+            assertTrue(b.distance > a.distance, "distances must stay strictly increasing")
+        }
     }
 
     @Test
