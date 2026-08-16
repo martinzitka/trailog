@@ -2,6 +2,7 @@ package io.github.martinzitka.trailog.data
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -22,6 +23,15 @@ interface ActivityDao {
     /** All activities, most recent first — the History list. */
     @Query("SELECT * FROM activities ORDER BY startTime DESC")
     fun allByStartTimeDesc(): Flow<List<ActivityEntity>>
+
+    /**
+     * All activities with their cached statistics, most recent first — the History list as it is
+     * actually rendered. Room resolves the relation in a second query inside the transaction, so
+     * this is two queries for the whole list rather than one per row.
+     */
+    @Transaction
+    @Query("SELECT * FROM activities ORDER BY startTime DESC")
+    fun allWithStatsByStartTimeDesc(): Flow<List<ActivityWithStats>>
 
     @Query("DELETE FROM activities WHERE id = :id")
     suspend fun delete(id: String)

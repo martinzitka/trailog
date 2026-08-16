@@ -23,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import io.github.martinzitka.trailog.ui.detail.ActivityDetailScreen
 import io.github.martinzitka.trailog.ui.history.HistoryScreen
+import io.github.martinzitka.trailog.ui.history.HistoryViewModel
 import io.github.martinzitka.trailog.ui.record.RecordScreen
 import io.github.martinzitka.trailog.ui.record.RecordViewModel
 import io.github.martinzitka.trailog.ui.sensors.SensorsScreen
@@ -44,6 +45,18 @@ fun TrailogApp() {
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = backStackEntry?.destination
 
+        // Standard single-top / restore-state tab switch, used by the bottom bar and by in-screen
+        // shortcuts to a tab (History's empty state sends the user to Record).
+        val switchTab: (TopLevelDestination) -> Unit = { dest ->
+            navController.navigate(dest.route) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             bottomBar = {
@@ -53,15 +66,7 @@ fun TrailogApp() {
                         val label = stringResource(dest.labelRes)
                         NavigationBarItem(
                             selected = selected,
-                            onClick = {
-                                navController.navigate(dest.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onClick = { switchTab(dest) },
                             icon = { Icon(dest.icon, contentDescription = null) },
                             label = { Text(label) },
                         )
@@ -82,8 +87,14 @@ fun TrailogApp() {
                     RecordScreen(viewModel = recordViewModel, modifier = Modifier.fillMaxSize())
                 }
                 composable(TopLevelDestination.HISTORY.route) {
+                    val context = LocalContext.current
+                    val historyViewModel: HistoryViewModel = viewModel(
+                        factory = HistoryViewModel.Factory(context),
+                    )
                     HistoryScreen(
+                        viewModel = historyViewModel,
                         onOpenActivity = { id -> navController.navigate(Routes.activityDetail(id)) },
+                        onStartRecording = { switchTab(TopLevelDestination.RECORD) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }

@@ -8,8 +8,8 @@ plugins {
 // M1 Android app. The M0 spike is gone; this is real code. Packages:
 //   data/      Room persistence (raw_points, recording_sessions), PRAGMA synchronous = FULL
 //   recording/ the RecordingEngine implementation, foreground service, boot recovery
-//   ui/        Compose screens (M1.5): navigation scaffold, theme, formatters, Record; the
-//              interim M1.3 harness has been replaced by the real Record screen
+//   ui/        Compose screens (M1.5): navigation scaffold, theme, formatters, Record, History;
+//              the interim M1.3 harness has been replaced by the real Record screen
 
 android {
     namespace = "io.github.martinzitka.trailog"
@@ -50,6 +50,17 @@ android {
         // Robolectric drives real SQLite in JVM unit tests, so Room migration and recompute
         // tests run on `./gradlew check` / CI without an emulator.
         unitTests.isIncludeAndroidResources = true
+    }
+
+    androidComponents {
+        // Unit tests run on the debug variant only. The Compose UI tests need the
+        // `ui-test-manifest` ComponentActivity, which is `debugImplementation` by design — it
+        // must never be merged into a release build — so `testReleaseUnitTest` cannot host them.
+        // The two variants differ only in application id suffix and minification, so running the
+        // same JVM tests twice would prove nothing anyway.
+        beforeVariants(selector().withBuildType("release")) { variant ->
+            variant.enableUnitTest = false
+        }
     }
 
     lint {

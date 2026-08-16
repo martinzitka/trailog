@@ -31,8 +31,16 @@ class ActivityRepository(
         now = now,
     )
 
-    /** All activities, most recent first. Backing flow for the History screen (M1.5). */
+    /** All activities, most recent first. */
     fun activitiesByRecency(): Flow<List<ActivityEntity>> = activities.allByStartTimeDesc()
+
+    /**
+     * All activities with their cached statistics, most recent first — the History screen's
+     * backing flow. Rows whose cache has not been built yet come through with null stats and are
+     * still listed; the figures are derived data, never a reason to hide a recording.
+     */
+    fun activitiesWithStatsByRecency(): Flow<List<ActivityWithStats>> =
+        activities.allWithStatsByStartTimeDesc()
 
     /** An activity's cached stats, observed. Null until the first recompute. */
     fun statsFlow(activityId: String): Flow<ActivityStatsEntity?> = stats.byIdFlow(activityId)

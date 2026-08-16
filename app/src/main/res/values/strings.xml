@@ -91,7 +91,26 @@
     <string name="record_recovery_auto_resumed">Recording resumed after a %1$s gap, in a new
         segment.</string>
 
-    <!-- Placeholder tabs not yet built (History, Sensors, Settings arrive later in M1.5). -->
+    <!-- History screen. -->
+    <string name="history_loading">Loading your activities…</string>
+    <string name="history_empty_title">No activities yet</string>
+    <string name="history_empty_body">Rides, runs, hikes and walks you record show up here, newest
+        first. Open the Record tab, pick an activity type and tap Start recording — everything
+        stays on your phone.</string>
+    <string name="history_empty_action">Go to Record</string>
+    <string name="history_error_title">Couldn’t load your activities</string>
+    <string name="history_error_body">Your recordings are safe on this phone — only the list
+        failed to load.</string>
+    <string name="history_error_retry">Try again</string>
+    <!-- Row subtitle: %1$s is the activity type, %2$s the date it was recorded. -->
+    <string name="history_row_subtitle">%1$s · %2$s</string>
+    <string name="history_stat_distance">Distance</string>
+    <string name="history_stat_duration">Duration</string>
+    <string name="history_stat_elevation_gain">Elev. gain</string>
+    <!-- Shown in place of a figure whose statistics have not been computed yet. -->
+    <string name="history_stat_pending">—</string>
+
+    <!-- Placeholder tabs not yet built (Sensors and Settings arrive later in M1.5). -->
     <string name="placeholder_coming_soon">Coming soon</string>
     <!-- %1$s is the screen name. -->
     <string name="placeholder_screen_pending">The %1$s screen is being built.</string>
