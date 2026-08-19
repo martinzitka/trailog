@@ -38,6 +38,20 @@ object Format {
     fun elevation(meters: Double): String =
         String.format(Locale.getDefault(), "%.0f m", meters)
 
+    /**
+     * A short metre-scale length to one decimal — reported GPS accuracy on the diagnostics screen,
+     * where the difference between 4 m and 4.8 m is worth seeing. Distances use [distance].
+     */
+    fun length(meters: Double): String =
+        String.format(Locale.getDefault(), "%.1f m", meters.coerceAtLeast(0.0))
+
+    /**
+     * A pressure in Pascals, rendered in hectopascals — the unit every barometric reading is quoted
+     * in, and the only place in the app where an SI value is shown scaled. Storage stays Pascals.
+     */
+    fun pressure(pascals: Double): String =
+        String.format(Locale.getDefault(), "%.1f hPa", pascals / 100.0)
+
     /** A ground speed in metres per second, rendered in km/h to one decimal. */
     fun speed(metersPerSecond: Double): String =
         String.format(Locale.getDefault(), "%.1f km/h", metersPerSecond.coerceAtLeast(0.0) * 3.6)

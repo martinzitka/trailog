@@ -184,7 +184,58 @@
     <string name="detail_export_done">Activity exported.</string>
     <string name="detail_export_failed">Couldn’t write the export file.</string>
 
-    <!-- Placeholder tabs not yet built (Sensors and Settings arrive later in M1.5). -->
+    <!-- Sensors and diagnostics — chrome. -->
+    <string name="sensors_title">Sensors &amp; diagnostics</string>
+    <string name="sensors_subtitle">Live readings while this screen is open. Nothing here is
+        recorded or stored.</string>
+    <string name="sensors_group_gps">GPS</string>
+    <string name="sensors_group_sensors">Sensors</string>
+    <string name="sensors_group_recording">Recording &amp; permissions</string>
+
+    <!-- Sensors — row labels. -->
+    <string name="sensors_row_provider">Provider</string>
+    <string name="sensors_row_accuracy">Accuracy</string>
+    <string name="sensors_row_satellites">Satellites</string>
+    <string name="sensors_row_fix_age">Last fix</string>
+    <string name="sensors_row_barometer">Barometer</string>
+    <string name="sensors_row_session_state">Recording session</string>
+    <string name="sensors_row_service_running">Foreground service</string>
+    <string name="sensors_row_permission_fine">Precise location</string>
+    <string name="sensors_row_permission_background">Location “Allow all the time”</string>
+    <string name="sensors_row_permission_notifications">Notifications</string>
+    <string name="sensors_row_battery">Battery optimisation</string>
+
+    <!-- Sensors — row values. -->
+    <string name="sensors_value_waiting">Waiting…</string>
+    <string name="sensors_value_unavailable">Not available on this device</string>
+    <string name="sensors_value_granted">Granted</string>
+    <string name="sensors_value_denied">Not granted</string>
+    <string name="sensors_value_exempt">Exempt</string>
+    <string name="sensors_value_not_exempt">Not exempt</string>
+    <string name="sensors_value_service_running">Running</string>
+    <string name="sensors_value_service_stopped">Not running</string>
+    <!-- %1$d satellites used in the fix, %2$d visible to the receiver. -->
+    <string name="sensors_value_satellites">%1$d used · %2$d visible</string>
+    <!-- %1$d satellites used in the fix, when the visible count is not known yet. -->
+    <string name="sensors_value_satellites_used_only">%1$d used</string>
+    <!-- %1$s is a coarse age, e.g. "3s" or "2m". -->
+    <string name="sensors_value_fix_age">%1$s ago</string>
+
+    <!-- Sensors — recording session states. -->
+    <string name="sensors_session_none">No session</string>
+    <string name="sensors_session_idle">Idle</string>
+    <string name="sensors_session_recording">Recording</string>
+    <string name="sensors_session_paused">Paused</string>
+    <string name="sensors_session_stopping">Saving</string>
+    <string name="sensors_session_recovering">Awaiting recovery</string>
+
+    <!-- Sensors — location permission missing. -->
+    <string name="sensors_permission_title">GPS readings need location permission</string>
+    <string name="sensors_permission_body">Without precise location Trailog cannot read the
+        receiver, so the GPS rows below stay empty. Other diagnostics still work.</string>
+    <string name="sensors_permission_grant">Grant location</string>
+
+    <!-- Placeholder tabs not yet built (Settings arrives later in M1.5). -->
     <string name="placeholder_coming_soon">Coming soon</string>
     <!-- %1$s is the screen name. -->
     <string name="placeholder_screen_pending">The %1$s screen is being built.</string>

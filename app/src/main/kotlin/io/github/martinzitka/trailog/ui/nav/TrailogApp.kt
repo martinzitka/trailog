@@ -28,6 +28,7 @@ import io.github.martinzitka.trailog.ui.history.HistoryViewModel
 import io.github.martinzitka.trailog.ui.record.RecordScreen
 import io.github.martinzitka.trailog.ui.record.RecordViewModel
 import io.github.martinzitka.trailog.ui.sensors.SensorsScreen
+import io.github.martinzitka.trailog.ui.sensors.SensorsViewModel
 import io.github.martinzitka.trailog.ui.settings.SettingsScreen
 import io.github.martinzitka.trailog.ui.theme.TrailogTheme
 
@@ -100,7 +101,11 @@ fun TrailogApp() {
                     )
                 }
                 composable(TopLevelDestination.SENSORS.route) {
-                    SensorsScreen(modifier = Modifier.fillMaxSize())
+                    val context = LocalContext.current
+                    val sensorsViewModel: SensorsViewModel = viewModel(
+                        factory = SensorsViewModel.Factory(context),
+                    )
+                    SensorsScreen(viewModel = sensorsViewModel, modifier = Modifier.fillMaxSize())
                 }
                 composable(TopLevelDestination.SETTINGS.route) {
                     SettingsScreen(modifier = Modifier.fillMaxSize())
