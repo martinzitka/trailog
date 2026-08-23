@@ -127,10 +127,25 @@ object Statistics {
 
                 var start = cumulative
                 var remaining = hopDistance
+                // The split `start` currently falls in, carried across iterations rather than
+                // recomputed from `start / splitDistance` each turn.
+                //
+                // That recomputation is only safe when every multiple of splitDistance is exactly
+                // representable as a double, which is true of 1000.0 and false of a mile
+                // (1609.344 m). When it is not, `(start / splitDistance).toInt()` can disagree with
+                // `(index + 1) * splitDistance` by one ulp, `boundary - start` comes back negative,
+                // and subtracting a negative take grows `remaining` — an infinite loop.
+                var index = (start / splitDistance).toInt()
                 while (remaining > 1e-9) {
-                    val index = (start / splitDistance).toInt()
-                    val boundary = (index + 1) * splitDistance
-                    val take = minOf(remaining, boundary - start)
+                    val room = (index + 1) * splitDistance - start
+                    if (room <= 1e-9) {
+                        // `start` sits on, or a hair past, this split's closing boundary. Move to
+                        // the next split rather than taking a zero- or negative-length bite; this
+                        // is what guarantees the loop makes progress.
+                        index++
+                        continue
+                    }
+                    val take = minOf(remaining, room)
                     val acc = accFor(index)
                     acc.distance += take
                     if (moving) acc.movingTime += dt.times(take / hopDistance)

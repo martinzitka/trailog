@@ -4,6 +4,7 @@ import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.core.model.RawPoint
 import io.github.martinzitka.trailog.core.model.Segment
 import kotlinx.datetime.Instant
+import org.junit.jupiter.api.Timeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -38,6 +39,52 @@ class SplitsTest {
                 alt = altStep?.let { 100.0 + i * it },
             )
         }
+
+    /**
+     * A split interval whose multiples are not exactly representable as a double — a mile is
+     * 1609.344 m — used to spin the hop-distribution loop forever: the per-iteration
+     * `(start / splitDistance).toInt()` could disagree with `(index + 1) * splitDistance`, hand back
+     * a negative amount of room, and *grow* the remaining distance.
+     *
+     * Every interval before this was a round number of metres, so nothing caught it until the
+     * Settings screen offered imperial units and the Activity detail screen locked up on a device.
+     * The timeout is the assertion that matters; the totals confirm the fix distributes correctly
+     * rather than merely terminating.
+     */
+    @Test
+    @Timeout(10)
+    fun `a split interval that is not exactly representable terminates and still sums to total`() {
+        val mile = 1609.344
+        val segments = Segment.segmentsOf(straightLine(3_000))
+        val total = Statistics.distance(segments)
+
+        val splits = Statistics.splits(segments, ActivityType.CYCLING, mile)
+
+        assertTrue(splits.isNotEmpty(), "a ride longer than a mile must produce splits")
+        assertEquals(total, splits.sumOf { it.distance }, 1e-6)
+        splits.dropLast(1).forEach {
+            assertEquals(mile, it.distance, 1e-6)
+        }
+        assertTrue(
+            splits.last().distance <= mile + 1e-6,
+            "the final split is a remainder, not an overflow: ${splits.last().distance}",
+        )
+        // No split may be negative — the old loop could subtract a negative take.
+        assertTrue(splits.all { it.distance > 0.0 }, "every split has positive length")
+    }
+
+    @Test
+    @Timeout(10)
+    fun `a range of awkward intervals all terminate and conserve distance`() {
+        val segments = Segment.segmentsOf(straightLine(500))
+        val total = Statistics.distance(segments)
+        // Thirds, a mile, a nautical mile, a yard-derived furlong: none land on binary boundaries.
+        listOf(1609.344, 1852.0, 201.168, 100.0 / 3.0, 7.3).forEach { interval ->
+            val splits = Statistics.splits(segments, ActivityType.CYCLING, interval)
+            assertEquals(total, splits.sumOf { it.distance }, 1e-6)
+            assertTrue(splits.all { it.distance > 0.0 }, "interval $interval produced an empty split")
+        }
+    }
 
     @Test
     fun `split distances sum to total and only the last is short`() {
