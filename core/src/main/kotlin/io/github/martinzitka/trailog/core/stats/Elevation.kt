@@ -115,8 +115,12 @@ object Elevation {
     /**
      * Centered moving average. The window shrinks at the ends so the first and last points are
      * averaged over whatever neighbours exist, rather than being dropped.
+     *
+     * Internal rather than private because [TrackProfile] plots the *same* smoothed altitude
+     * series the deadband accumulates over. Smoothing altitude a second, slightly different way
+     * for the chart would let the drawn profile disagree with the reported gain figure.
      */
-    private fun movingAverage(values: List<Double>, window: Int): List<Double> {
+    internal fun movingAverage(values: List<Double>, window: Int): List<Double> {
         if (window <= 1) return values
         val half = window / 2
         return values.indices.map { i ->

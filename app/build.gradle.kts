@@ -8,7 +8,8 @@ plugins {
 // M1 Android app. The M0 spike is gone; this is real code. Packages:
 //   data/      Room persistence (raw_points, recording_sessions), PRAGMA synchronous = FULL
 //   recording/ the RecordingEngine implementation, foreground service, boot recovery
-//   ui/        interim M1.3 control+diagnostics harness (real screens are M1.5)
+//   ui/        Compose screens (M1.5): navigation scaffold, theme, formatters, Record, History;
+//              the interim M1.3 harness has been replaced by the real Record screen
 
 android {
     namespace = "io.github.martinzitka.trailog"
@@ -51,6 +52,17 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
+    androidComponents {
+        // Unit tests run on the debug variant only. The Compose UI tests need the
+        // `ui-test-manifest` ComponentActivity, which is `debugImplementation` by design — it
+        // must never be merged into a release build — so `testReleaseUnitTest` cannot host them.
+        // The two variants differ only in application id suffix and minification, so running the
+        // same JVM tests twice would prove nothing anyway.
+        beforeVariants(selector().withBuildType("release")) { variant ->
+            variant.enableUnitTest = false
+        }
+    }
+
     lint {
         warningsAsErrors = false
         // "A newer version exists" nags — dependency freshness is Renovate's job, not the
@@ -75,6 +87,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.service)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
@@ -84,6 +97,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.navigation.compose)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(libs.androidx.room.runtime)
@@ -94,6 +109,13 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Already the project's flow-testing tool in :core; needed here because a WhileSubscribed
+    // StateFlow only advances while something collects it.
+    testImplementation(libs.turbine)
+    // Compose UI tests run as JVM unit tests under Robolectric (unitTests.isIncludeAndroidResources).
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
 // Room schema JSON is exported here and committed; migration tests validate against it and it

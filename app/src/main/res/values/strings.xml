@@ -9,4 +9,262 @@
     <string name="recording_notification_paused">Trailog · paused</string>
     <!-- %1$s elapsed, %2$d fixes this run, %3$s accuracy in metres. -->
     <string name="recording_notification_text">%1$s · %2$d fixes · acc %3$s m</string>
+
+    <!-- Bottom navigation. -->
+    <string name="nav_record">Record</string>
+    <string name="nav_history">History</string>
+    <string name="nav_sensors">Sensors</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_activity_detail">Activity detail</string>
+
+    <!-- Activity types. -->
+    <string name="activity_type_cycling">Cycling</string>
+    <string name="activity_type_mountain_biking">Mountain biking</string>
+    <string name="activity_type_running">Running</string>
+    <string name="activity_type_hiking">Hiking</string>
+    <string name="activity_type_walking">Walking</string>
+
+    <!-- Record screen — controls. -->
+    <string name="record_title">Record</string>
+    <string name="record_activity_type">Activity type</string>
+    <string name="record_start">Start recording</string>
+    <string name="record_pause">Pause</string>
+    <string name="record_resume">Resume</string>
+    <string name="record_stop">Stop</string>
+    <string name="record_saving">Saving activity…</string>
+
+    <!-- Record screen — live stats labels. -->
+    <string name="record_stat_elapsed">Elapsed</string>
+    <string name="record_stat_moving">Moving</string>
+    <string name="record_stat_distance">Distance</string>
+    <string name="record_stat_speed">Speed</string>
+    <string name="record_stat_elevation_gain">Elevation gain</string>
+    <string name="record_stat_placeholder">—</string>
+
+    <!-- Record screen — map / live trace. -->
+    <string name="record_map_recenter">Re-centre</string>
+    <string name="record_map_recenter_cd">Re-centre the map on your position</string>
+    <string name="record_trace_empty">Waiting for your first GPS fix…</string>
+
+    <!-- Record screen — ready / idle. -->
+    <string name="record_ready_hint">Ready to record. Pick an activity type and start.</string>
+
+    <!-- Record screen — permissions. -->
+    <string name="record_permissions_missing_title">Location permission needed</string>
+    <string name="record_permissions_missing_body">Trailog records your route using GPS, so it
+        needs location access before it can start. No location data ever leaves your control.</string>
+    <string name="record_permission_fine">Precise location</string>
+    <string name="record_permission_background">Location “Allow all the time”</string>
+    <string name="record_permission_notifications">Notifications</string>
+    <string name="record_permission_granted">granted</string>
+    <string name="record_permission_denied">not granted</string>
+    <string name="record_grant_foreground">Grant location &amp; notifications</string>
+    <string name="record_request_background">Set location to “Allow all the time”</string>
+    <string name="record_open_settings">Open app settings</string>
+    <string name="record_background_rationale">“Allow all the time” is what lets Trailog pick your
+        recording back up after a phone restart. Without it, a reboot mid-ride cannot resume
+        recording. Grant it in system settings under Location.</string>
+    <string name="record_notifications_rationale">Android needs notification permission to show the
+        ongoing recording notification the tracker runs behind.</string>
+
+    <!-- Record screen — battery optimisation. -->
+    <string name="record_battery_warning_title">Battery optimisation is on</string>
+    <string name="record_battery_warning_body">Your phone may kill recording in the background to
+        save power. Exempt Trailog from battery optimisation so long rides record to the end.</string>
+    <string name="record_battery_fix">Exempt Trailog</string>
+
+    <!-- Record screen — stop confirmation. -->
+    <string name="record_stop_confirm_title">Stop recording?</string>
+    <string name="record_stop_confirm_body">This finishes and saves the activity. An accidental
+        stop loses a ride.</string>
+    <string name="record_stop_confirm_confirm">Stop &amp; save</string>
+    <string name="record_stop_confirm_dismiss">Keep recording</string>
+
+    <!-- Record screen — interrupted-session recovery. -->
+    <string name="record_interrupted_title">Interrupted activity found</string>
+    <!-- %1$s is a coarse gap length, e.g. "42m" or "2h 10m". -->
+    <string name="record_interrupted_body">Recording was interrupted %1$s ago. Resume it into a
+        new segment, or finish and save what was recorded.</string>
+    <string name="record_interrupted_resume">Resume</string>
+    <string name="record_interrupted_finish">Finish &amp; save</string>
+    <!-- %1$s is a coarse gap length. Shown when recovery resumed automatically after a short gap. -->
+    <string name="record_recovery_auto_resumed">Recording resumed after a %1$s gap, in a new
+        segment.</string>
+
+    <!-- History screen. -->
+    <string name="history_loading">Loading your activities…</string>
+    <string name="history_empty_title">No activities yet</string>
+    <string name="history_empty_body">Rides, runs, hikes and walks you record show up here, newest
+        first. Open the Record tab, pick an activity type and tap Start recording — everything
+        stays on your phone.</string>
+    <string name="history_empty_action">Go to Record</string>
+    <string name="history_error_title">Couldn’t load your activities</string>
+    <string name="history_error_body">Your recordings are safe on this phone — only the list
+        failed to load.</string>
+    <string name="history_error_retry">Try again</string>
+    <!-- Row subtitle: %1$s is the activity type, %2$s the date it was recorded. -->
+    <string name="history_row_subtitle">%1$s · %2$s</string>
+    <string name="history_stat_distance">Distance</string>
+    <string name="history_stat_duration">Duration</string>
+    <string name="history_stat_elevation_gain">Elev. gain</string>
+    <!-- Shown in place of a figure whose statistics have not been computed yet. -->
+    <string name="history_stat_pending">—</string>
+
+    <!-- Activity detail — chrome. -->
+    <string name="detail_loading">Loading activity…</string>
+    <string name="detail_back">Back</string>
+    <string name="detail_gone_title">Activity deleted</string>
+    <string name="detail_gone_body">This activity and its recorded points are gone.</string>
+    <string name="detail_gone_action">Back to History</string>
+    <!-- Shown while the statistics cache is being rebuilt; figures are computed live meanwhile. -->
+    <string name="detail_stats_pending">Figures computed from raw points — the cache is still
+        being rebuilt.</string>
+
+    <!-- Activity detail — map. -->
+    <string name="detail_map_cd">Map of the recorded route</string>
+    <string name="detail_map_empty">This activity has no recorded positions.</string>
+
+    <!-- Activity detail — summary figures. -->
+    <string name="detail_summary_title">Summary</string>
+    <string name="detail_stat_distance">Distance</string>
+    <string name="detail_stat_elapsed">Elapsed time</string>
+    <string name="detail_stat_moving">Moving time</string>
+    <string name="detail_stat_elevation_gain">Elevation gain</string>
+    <string name="detail_stat_elevation_loss">Elevation loss</string>
+    <string name="detail_stat_average_speed">Average speed</string>
+    <string name="detail_stat_max_speed">Max speed</string>
+    <!-- %1$d is a count of recording segments; more than one means the recording had gaps. -->
+    <plurals name="detail_segment_note">
+        <item quantity="one">Recorded in one unbroken segment.</item>
+        <item quantity="other">Recorded in %1$d segments — gaps are shown as breaks, never joined
+            by a straight line.</item>
+    </plurals>
+
+    <!-- Activity detail — charts. -->
+    <string name="detail_chart_elevation">Elevation</string>
+    <string name="detail_chart_speed">Speed</string>
+    <string name="detail_chart_elevation_cd">Elevation profile against distance</string>
+    <string name="detail_chart_speed_cd">Speed profile against distance</string>
+    <string name="detail_chart_no_elevation">No altitude was recorded for this activity.</string>
+    <string name="detail_chart_no_speed">Not enough fixes to plot a speed profile.</string>
+
+    <!-- Activity detail — splits table. -->
+    <string name="detail_splits_title">Per-kilometre splits</string>
+    <!-- Imperial: the ride is re-lapped at miles, not relabelled, so the wording changes too. -->
+    <string name="detail_splits_title_imperial">Per-mile splits</string>
+    <string name="detail_splits_empty">Too short to split.</string>
+    <string name="detail_splits_column_split">km</string>
+    <string name="detail_splits_column_split_imperial">mi</string>
+    <string name="detail_splits_column_time">Time</string>
+    <string name="detail_splits_column_speed">Speed</string>
+    <string name="detail_splits_column_gain">Gain</string>
+    <!-- %1$d is the split number, e.g. the 3rd kilometre. -->
+    <string name="detail_splits_row_cd">Kilometre %1$d</string>
+    <!-- Marks a final split shorter than a full lap; %1$s is its real length. -->
+    <string name="detail_splits_partial">%1$s</string>
+
+    <!-- Activity detail — editing. -->
+    <string name="detail_edit">Edit activity</string>
+    <string name="detail_edit_title">Edit activity</string>
+    <string name="detail_edit_name">Name</string>
+    <string name="detail_edit_notes">Notes</string>
+    <string name="detail_edit_type">Activity type</string>
+    <string name="detail_edit_save">Save</string>
+    <string name="detail_edit_cancel">Cancel</string>
+
+    <!-- Activity detail — delete. -->
+    <string name="detail_delete">Delete activity</string>
+    <string name="detail_delete_confirm_title">Delete this activity?</string>
+    <string name="detail_delete_confirm_body">The route, its statistics and every recorded GPS
+        point are erased from this phone. This cannot be undone — export it first if you want to
+        keep it.</string>
+    <string name="detail_delete_confirm_confirm">Delete</string>
+    <string name="detail_delete_confirm_dismiss">Keep</string>
+
+    <!-- Activity detail — export. -->
+    <string name="detail_export">Export</string>
+    <string name="detail_export_gpx">Export as GPX</string>
+    <string name="detail_export_done">Activity exported.</string>
+    <string name="detail_export_failed">Couldn’t write the export file.</string>
+
+    <!-- Sensors and diagnostics — chrome. -->
+    <string name="sensors_title">Sensors &amp; diagnostics</string>
+    <string name="sensors_subtitle">Live readings while this screen is open. Nothing here is
+        recorded or stored.</string>
+    <string name="sensors_group_gps">GPS</string>
+    <string name="sensors_group_sensors">Sensors</string>
+    <string name="sensors_group_recording">Recording &amp; permissions</string>
+
+    <!-- Sensors — row labels. -->
+    <string name="sensors_row_provider">Provider</string>
+    <string name="sensors_row_accuracy">Accuracy</string>
+    <string name="sensors_row_satellites">Satellites</string>
+    <string name="sensors_row_fix_age">Last fix</string>
+    <string name="sensors_row_barometer">Barometer</string>
+    <string name="sensors_row_session_state">Recording session</string>
+    <string name="sensors_row_service_running">Foreground service</string>
+    <string name="sensors_row_permission_fine">Precise location</string>
+    <string name="sensors_row_permission_background">Location “Allow all the time”</string>
+    <string name="sensors_row_permission_notifications">Notifications</string>
+    <string name="sensors_row_battery">Battery optimisation</string>
+
+    <!-- Sensors — row values. -->
+    <string name="sensors_value_waiting">Waiting…</string>
+    <string name="sensors_value_unavailable">Not available on this device</string>
+    <string name="sensors_value_granted">Granted</string>
+    <string name="sensors_value_denied">Not granted</string>
+    <string name="sensors_value_exempt">Exempt</string>
+    <string name="sensors_value_not_exempt">Not exempt</string>
+    <string name="sensors_value_service_running">Running</string>
+    <string name="sensors_value_service_stopped">Not running</string>
+    <!-- %1$d satellites used in the fix, %2$d visible to the receiver. -->
+    <string name="sensors_value_satellites">%1$d used · %2$d visible</string>
+    <!-- %1$d satellites used in the fix, when the visible count is not known yet. -->
+    <string name="sensors_value_satellites_used_only">%1$d used</string>
+    <!-- %1$s is a coarse age, e.g. "3s" or "2m". -->
+    <string name="sensors_value_fix_age">%1$s ago</string>
+
+    <!-- Sensors — recording session states. -->
+    <string name="sensors_session_none">No session</string>
+    <string name="sensors_session_idle">Idle</string>
+    <string name="sensors_session_recording">Recording</string>
+    <string name="sensors_session_paused">Paused</string>
+    <string name="sensors_session_stopping">Saving</string>
+    <string name="sensors_session_recovering">Awaiting recovery</string>
+
+    <!-- Sensors — location permission missing. -->
+    <string name="sensors_permission_title">GPS readings need location permission</string>
+    <string name="sensors_permission_body">Without precise location Trailog cannot read the
+        receiver, so the GPS rows below stay empty. Other diagnostics still work.</string>
+    <string name="sensors_permission_grant">Grant location</string>
+
+    <!-- Settings. -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">Every setting here changes something. Options arrive
+        alongside the features that read them.</string>
+
+    <!-- Settings — units. -->
+    <string name="settings_group_units">Units</string>
+    <string name="settings_units_metric">Metric</string>
+    <string name="settings_units_metric_detail">Kilometres, metres, km/h</string>
+    <string name="settings_units_imperial">Imperial</string>
+    <string name="settings_units_imperial_detail">Miles, feet, mph</string>
+    <string name="settings_units_note">Changes how figures are displayed. Your recordings are
+        always stored in metric, so switching back and forth loses nothing.</string>
+
+    <!-- Settings — appearance. -->
+    <string name="settings_group_appearance">Appearance</string>
+    <string name="settings_theme_label">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_dynamic_colour_label">Material You colours</string>
+    <string name="settings_dynamic_colour_body">Take the palette from your wallpaper instead of
+        using Trailog\'s own green.</string>
+
+    <!-- Settings — recording. -->
+    <string name="settings_group_recording">Recording</string>
+    <string name="settings_keep_screen_on_label">Keep screen on while recording</string>
+    <string name="settings_keep_screen_on_body">Useful on a handlebar mount. Costs battery on long
+        rides, so it stays off unless you turn it on. Recording itself never needs the screen.</string>
 </resources>
