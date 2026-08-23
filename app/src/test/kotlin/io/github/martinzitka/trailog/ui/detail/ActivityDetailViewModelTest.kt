@@ -10,7 +10,9 @@ import io.github.martinzitka.trailog.data.ActivityWithStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -196,6 +198,50 @@ class ActivityDetailViewModelTest {
         }
     }
 
+    @Test fun `an imperial split interval re-laps the ride at miles rather than relabelling it`() =
+        runTest(dispatcher) {
+            // The same ~2.5 km ride: two kilometre laps become one mile lap and a remainder.
+            val vm = viewModel(
+                rows = MutableStateFlow(row()),
+                points = ride(count = 350),
+                splitInterval = flowOf(ActivityDetailViewModel.SPLIT_DISTANCE_IMPERIAL),
+            )
+            collecting(vm) {
+                val splits = loaded(vm).splits
+
+                assertEquals("~2.5 km is one full mile plus a remainder", 2, splits.size)
+                assertEquals(
+                    ActivityDetailViewModel.SPLIT_DISTANCE_IMPERIAL,
+                    splits[0].distance,
+                    1.0,
+                )
+                assertFalse("a full mile lap is not partial", splits[0].isPartial)
+                assertTrue("the tail is short of a mile", splits[1].isPartial)
+            }
+        }
+
+    @Test fun `changing the unit preference re-computes the splits while the screen is open`() =
+        runTest(dispatcher) {
+            val interval = MutableStateFlow(ActivityDetailViewModel.SPLIT_DISTANCE_METRIC)
+            val vm = viewModel(
+                rows = MutableStateFlow(row()),
+                points = ride(count = 350),
+                splitInterval = interval,
+            )
+            collecting(vm) {
+                assertEquals(3, loaded(vm).splits.size)
+
+                interval.value = ActivityDetailViewModel.SPLIT_DISTANCE_IMPERIAL
+                testScheduler.advanceUntilIdle()
+
+                assertEquals(
+                    "switching units must re-lap, not leave a stale kilometre table",
+                    2,
+                    loaded(vm).splits.size,
+                )
+            }
+        }
+
     @Test fun `per-split elevation sums to the activity total`() = runTest(dispatcher) {
         val vm = viewModel(
             rows = MutableStateFlow(row(stats = null)),
@@ -280,6 +326,7 @@ class ActivityDetailViewModelTest {
         points: List<RawPoint>,
         onSave: (String, String, String?, ActivityType) -> Unit = { _, _, _, _ -> },
         onDelete: (String) -> Boolean = { true },
+        splitInterval: Flow<Double> = flowOf(ActivityDetailViewModel.SPLIT_DISTANCE_METRIC),
     ) = ActivityDetailViewModel(
         activityId = ACTIVITY_ID,
         row = rows,
@@ -293,6 +340,7 @@ class ActivityDetailViewModelTest {
         },
         saveMetadata = { id, name, notes, type -> onSave(id, name, notes, type) },
         deleteActivity = { id -> onDelete(id) },
+        splitInterval = splitInterval,
         computeDispatcher = dispatcher,
     )
 

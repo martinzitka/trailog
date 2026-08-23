@@ -49,6 +49,12 @@ Rationale:
   explicit and off by default, and it changes only the Record screen's wake flag, nothing
   about how recording works. When the Settings screen lands, this is a natural first
   effective setting to add (and it satisfies the "only settings that something reads" rule).
+
+  **Landed 2026-08-19** with the M1.5 Settings screen, on exactly those terms: off by default,
+  and it sets `View.keepScreenOn` on the Record screen only while the state is `Recording`.
+  Paused deliberately does not qualify — nothing is being captured to watch — and the flag is
+  cleared on dispose so it can never outlive the screen that set it. Recording itself is
+  untouched.
 - This decision is independent of the wake lock the service itself may hold to keep the CPU
   alive for location delivery; that is a recording-durability mechanism, not a screen
   behaviour, and is unaffected here.

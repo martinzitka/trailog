@@ -32,7 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.martinzitka.trailog.R
-import io.github.martinzitka.trailog.ui.format.Format
+import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.format.icon
 import io.github.martinzitka.trailog.ui.format.label
 
@@ -162,8 +162,9 @@ private fun ActivityRow(
     item: HistoryItem,
     onClick: () -> Unit,
 ) {
+    val format = LocalFormatter.current
     val typeLabel = item.type.label()
-    val date = Format.date(item.startTime)
+    val date = format.date(item.startTime)
     // An unnamed activity falls back to its type as the title, so the subtitle drops the type
     // rather than repeating it.
     val title = item.name.ifBlank { typeLabel }
@@ -213,17 +214,17 @@ private fun ActivityRow(
             ) {
                 Metric(
                     label = stringResource(R.string.history_stat_distance),
-                    value = item.distance?.let { Format.distance(it) },
+                    value = item.distance?.let { format.distance(it) },
                     modifier = Modifier.weight(1f),
                 )
                 Metric(
                     label = stringResource(R.string.history_stat_duration),
-                    value = item.elapsedSeconds?.let { Format.duration(it) },
+                    value = item.elapsedSeconds?.let { format.duration(it) },
                     modifier = Modifier.weight(1f),
                 )
                 Metric(
                     label = stringResource(R.string.history_stat_elevation_gain),
-                    value = item.elevationGain?.let { Format.elevation(it) },
+                    value = item.elevationGain?.let { format.elevation(it) },
                     modifier = Modifier.weight(1f),
                 )
             }

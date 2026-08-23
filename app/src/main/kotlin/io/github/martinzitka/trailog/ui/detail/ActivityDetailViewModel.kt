@@ -15,12 +15,17 @@ import io.github.martinzitka.trailog.data.ActivityRepository
 import io.github.martinzitka.trailog.data.ActivityWithStats
 import io.github.martinzitka.trailog.data.TrailogDatabase
 import io.github.martinzitka.trailog.data.toDomain
+import io.github.martinzitka.trailog.ui.format.UnitSystem
 import io.github.martinzitka.trailog.ui.map.TracePoint
+import io.github.martinzitka.trailog.ui.settings.PrefsAppSettings
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -56,19 +61,19 @@ class ActivityDetailViewModel(
     private val loadActivity: suspend (String) -> Activity?,
     private val saveMetadata: suspend (String, String, String?, ActivityType) -> Unit,
     private val deleteActivity: suspend (String) -> Boolean,
+    splitInterval: Flow<Double> = flowOf(SPLIT_DISTANCE_METRIC),
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
-    val uiState: StateFlow<ActivityDetailUiState> = row
-        .map { current ->
-            if (current == null) {
-                // No row: deleted, here or elsewhere. The screen leaves rather than showing a
-                // stale view of something that no longer exists.
-                ActivityDetailUiState.Gone
-            } else {
-                ActivityDetailUiState.Loaded(detailOf(current))
-            }
+    val uiState: StateFlow<ActivityDetailUiState> = combine(row, splitInterval) { current, interval ->
+        if (current == null) {
+            // No row: deleted, here or elsewhere. The screen leaves rather than showing a
+            // stale view of something that no longer exists.
+            ActivityDetailUiState.Gone
+        } else {
+            ActivityDetailUiState.Loaded(detailOf(current, interval))
         }
+    }
         .flowOn(computeDispatcher)
         .stateIn(
             scope = viewModelScope,
@@ -117,7 +122,7 @@ class ActivityDetailViewModel(
 
     // ---- derivation -------------------------------------------------------------------------
 
-    private suspend fun detailOf(row: ActivityWithStats): ActivityDetail {
+    private suspend fun detailOf(row: ActivityWithStats, splitInterval: Double): ActivityDetail {
         val type = ActivityType.valueOf(row.activity.type)
         val domain = loadActivity(activityId)
         val segments = domain?.segments() ?: emptyList()
@@ -147,15 +152,19 @@ class ActivityDetailViewModel(
             },
             elevationProfile = TrackProfile.elevation(segments),
             speedProfile = TrackProfile.speed(segments),
-            splits = splitsOf(segments, type),
+            splits = splitsOf(segments, type, splitInterval),
             statsPending = cached == null,
         )
     }
 
-    private fun splitsOf(segments: List<Segment>, type: ActivityType): List<SplitRow> =
-        Statistics.splits(segments, type, SPLIT_DISTANCE).map { split ->
+    private fun splitsOf(
+        segments: List<Segment>,
+        type: ActivityType,
+        interval: Double,
+    ): List<SplitRow> =
+        Statistics.splits(segments, type, interval).map { split ->
             SplitRow(
-                // Riders count from kilometre one, not zero.
+                // Riders count from split one, not zero.
                 number = split.index + 1,
                 distance = split.distance,
                 movingSeconds = split.movingTime.toLong(DurationUnit.SECONDS),
@@ -163,7 +172,7 @@ class ActivityDetailViewModel(
                 elevationGain = split.elevationGain,
                 elevationLoss = split.elevationLoss,
                 // A metre of slack: floating-point accumulation lands a "full" split a hair short.
-                isPartial = split.distance < SPLIT_DISTANCE - 1.0,
+                isPartial = split.distance < interval - 1.0,
             )
         }
 
@@ -184,18 +193,34 @@ class ActivityDetailViewModel(
                 loadActivity = repository::loadActivity,
                 saveMetadata = repository::updateMetadata,
                 deleteActivity = repository::delete,
+                // The single place the unit preference becomes a split distance. An imperial user
+                // wants the ride lapped at miles, not kilometre laps relabelled — so the choice is
+                // made here, in metres, and the ViewModel stays unit-agnostic.
+                splitInterval = PrefsAppSettings.get(appContext).preferences.map { prefs ->
+                    when (prefs.unitSystem) {
+                        UnitSystem.METRIC -> SPLIT_DISTANCE_METRIC
+                        UnitSystem.IMPERIAL -> SPLIT_DISTANCE_IMPERIAL
+                    }
+                }.distinctUntilChanged(),
             ) as T
         }
     }
 
-    private companion object {
-        const val STOP_TIMEOUT_MS = 5_000L
+    internal companion object {
+        private const val STOP_TIMEOUT_MS = 5_000L
 
         /**
-         * Splits are per kilometre. SI, and a parameter of the computation rather than a display
-         * choice — an imperial *display* preference must not silently re-lap the ride at miles
-         * (CLAUDE.md). Offering a mile option later means changing this, deliberately.
+         * The split interval, in metres — SI, like every other length here.
+         *
+         * It arrives as a constructor [Flow] rather than being read from the preference directly,
+         * so this class never learns that a unit preference exists: it is handed a distance and
+         * laps the ride at that distance. Choosing *which* distance is the [Factory]'s job.
+         *
+         * A mile rather than a kilometre is a deliberate re-lapping of the ride, not a conversion
+         * of the same figures — which is why it changes what `:core` is asked to compute instead of
+         * how the answer is rendered (ADR 0014).
          */
-        const val SPLIT_DISTANCE = 1_000.0
+        const val SPLIT_DISTANCE_METRIC = 1_000.0
+        const val SPLIT_DISTANCE_IMPERIAL = 1609.344
     }
 }

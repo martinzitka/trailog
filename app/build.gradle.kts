@@ -109,6 +109,9 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Already the project's flow-testing tool in :core; needed here because a WhileSubscribed
+    // StateFlow only advances while something collects it.
+    testImplementation(libs.turbine)
     // Compose UI tests run as JVM unit tests under Robolectric (unitTests.isIncludeAndroidResources).
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test.junit4)

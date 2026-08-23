@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -52,11 +53,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.martinzitka.trailog.R
 import io.github.martinzitka.trailog.core.model.ActivityType
-import io.github.martinzitka.trailog.ui.format.Format
+import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.format.icon
 import io.github.martinzitka.trailog.ui.format.label
 import io.github.martinzitka.trailog.ui.map.RouteMap
 import io.github.martinzitka.trailog.ui.map.TracePoint
+import io.github.martinzitka.trailog.ui.settings.PrefsAppSettings
 
 /**
  * The Record screen. Renders each of the seven [RecordUiState] cases and forwards intent to the
@@ -74,6 +76,19 @@ fun RecordScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.uiState.collectAsState()
+
+    // Opt-in only, and only while actually recording (ADR 0011: recording never depends on the
+    // screen — the service does the work, so the default is to let the phone sleep and save the
+    // battery for a long ride). Paused does not qualify: nothing is being captured to watch.
+    val keepScreenOn by PrefsAppSettings.get(context).preferences.collectAsState()
+    val holdScreenOn = keepScreenOn.keepScreenOnWhileRecording && state is RecordUiState.Recording
+    val view = LocalView.current
+    DisposableEffect(view, holdScreenOn) {
+        view.keepScreenOn = holdScreenOn
+        // Released on leaving the screen as well as on stopping, so the flag can never outlive
+        // the composable that set it.
+        onDispose { view.keepScreenOn = false }
+    }
 
     val foregroundLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -308,7 +323,10 @@ private fun InterruptedContent(
                 )
             }
             Text(
-                stringResource(R.string.record_interrupted_body, Format.elapsedSince(gapSeconds)),
+                stringResource(
+                    R.string.record_interrupted_body,
+                    LocalFormatter.current.elapsedSince(gapSeconds),
+                ),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -343,16 +361,17 @@ private fun LiveTraceMap(segments: List<List<TracePoint>>) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LiveStatsGrid(live: LiveStats) {
+    val format = LocalFormatter.current
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        StatTile(stringResource(R.string.record_stat_elapsed), Format.duration(live.elapsedSeconds))
-        StatTile(stringResource(R.string.record_stat_moving), Format.duration(live.movingSeconds))
-        StatTile(stringResource(R.string.record_stat_distance), Format.distance(live.distance))
-        StatTile(stringResource(R.string.record_stat_speed), Format.speed(live.currentSpeed))
-        StatTile(stringResource(R.string.record_stat_elevation_gain), Format.elevation(live.elevationGain))
+        StatTile(stringResource(R.string.record_stat_elapsed), format.duration(live.elapsedSeconds))
+        StatTile(stringResource(R.string.record_stat_moving), format.duration(live.movingSeconds))
+        StatTile(stringResource(R.string.record_stat_distance), format.distance(live.distance))
+        StatTile(stringResource(R.string.record_stat_speed), format.speed(live.currentSpeed))
+        StatTile(stringResource(R.string.record_stat_elevation_gain), format.elevation(live.elevationGain))
     }
 }
 

@@ -61,7 +61,8 @@ import androidx.compose.ui.unit.dp
 import io.github.martinzitka.trailog.R
 import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.ui.chart.ProfileChart
-import io.github.martinzitka.trailog.ui.format.Format
+import io.github.martinzitka.trailog.ui.format.LocalFormatter
+import io.github.martinzitka.trailog.ui.format.UnitSystem
 import io.github.martinzitka.trailog.ui.format.label
 import io.github.martinzitka.trailog.ui.map.RouteMap
 import kotlinx.coroutines.Dispatchers
@@ -89,6 +90,9 @@ fun ActivityDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Hoisted out of the composable scope so the export lambda below can capture it: a
+    // CompositionLocal cannot be read from inside a plain onClick.
+    val format = LocalFormatter.current
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -147,7 +151,7 @@ fun ActivityDetailScreen(
                         IconButton(
                             onClick = {
                                 exportLauncher.launch(
-                                    Format.exportFileName(
+                                    format.exportFileName(
                                         slug = loaded.name.ifBlank { loaded.type.name },
                                         epochMillis = loaded.startTime,
                                         extension = "gpx",
@@ -270,6 +274,7 @@ private fun GoneContent(onBack: () -> Unit) {
 
 @Composable
 private fun LoadedContent(detail: ActivityDetail) {
+    val format = LocalFormatter.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -278,7 +283,7 @@ private fun LoadedContent(detail: ActivityDetail) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            Format.dateTime(detail.startTime),
+            format.dateTime(detail.startTime),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -316,8 +321,8 @@ private fun LoadedContent(detail: ActivityDetail) {
         ProfileChart(
             series = detail.elevationProfile,
             title = stringResource(R.string.detail_chart_elevation),
-            minLabel = detail.elevationProfile.minValue?.let { Format.elevation(it) }.orEmpty(),
-            maxLabel = detail.elevationProfile.maxValue?.let { Format.elevation(it) }.orEmpty(),
+            minLabel = detail.elevationProfile.minValue?.let { format.elevation(it) }.orEmpty(),
+            maxLabel = detail.elevationProfile.maxValue?.let { format.elevation(it) }.orEmpty(),
             emptyLabel = stringResource(R.string.detail_chart_no_elevation),
             contentDescription = stringResource(R.string.detail_chart_elevation_cd),
         )
@@ -325,8 +330,8 @@ private fun LoadedContent(detail: ActivityDetail) {
         ProfileChart(
             series = detail.speedProfile,
             title = stringResource(R.string.detail_chart_speed),
-            minLabel = detail.speedProfile.minValue?.let { Format.speed(it) }.orEmpty(),
-            maxLabel = detail.speedProfile.maxValue?.let { Format.speed(it) }.orEmpty(),
+            minLabel = detail.speedProfile.minValue?.let { format.speed(it) }.orEmpty(),
+            maxLabel = detail.speedProfile.maxValue?.let { format.speed(it) }.orEmpty(),
             emptyLabel = stringResource(R.string.detail_chart_no_speed),
             contentDescription = stringResource(R.string.detail_chart_speed_cd),
         )
@@ -340,6 +345,7 @@ private fun LoadedContent(detail: ActivityDetail) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SummarySection(detail: ActivityDetail) {
+    val format = LocalFormatter.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.detail_summary_title), style = MaterialTheme.typography.titleMedium)
 
@@ -348,13 +354,13 @@ private fun SummarySection(detail: ActivityDetail) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Figure(R.string.detail_stat_distance, Format.distance(detail.distance))
-            Figure(R.string.detail_stat_elapsed, Format.duration(detail.elapsedSeconds))
-            Figure(R.string.detail_stat_moving, Format.duration(detail.movingSeconds))
-            Figure(R.string.detail_stat_elevation_gain, Format.elevation(detail.elevationGain))
-            Figure(R.string.detail_stat_elevation_loss, Format.elevation(detail.elevationLoss))
-            Figure(R.string.detail_stat_average_speed, Format.speed(detail.averageSpeed))
-            Figure(R.string.detail_stat_max_speed, Format.speed(detail.maxSpeed))
+            Figure(R.string.detail_stat_distance, format.distance(detail.distance))
+            Figure(R.string.detail_stat_elapsed, format.duration(detail.elapsedSeconds))
+            Figure(R.string.detail_stat_moving, format.duration(detail.movingSeconds))
+            Figure(R.string.detail_stat_elevation_gain, format.elevation(detail.elevationGain))
+            Figure(R.string.detail_stat_elevation_loss, format.elevation(detail.elevationLoss))
+            Figure(R.string.detail_stat_average_speed, format.speed(detail.averageSpeed))
+            Figure(R.string.detail_stat_max_speed, format.speed(detail.maxSpeed))
         }
 
         if (detail.segmentCount > 0) {
@@ -389,7 +395,15 @@ private fun Figure(@StringRes labelRes: Int, value: String) {
 private fun SplitsSection(detail: ActivityDetail) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            stringResource(R.string.detail_splits_title),
+            // The heading follows the lap length the splits were actually computed at, so an
+            // imperial reader is never told "per-kilometre" above a table measured in miles.
+            stringResource(
+                if (LocalFormatter.current.units == UnitSystem.IMPERIAL) {
+                    R.string.detail_splits_title_imperial
+                } else {
+                    R.string.detail_splits_title
+                },
+            ),
             style = MaterialTheme.typography.titleMedium,
         )
 
@@ -418,7 +432,12 @@ private fun SplitHeaderRow() {
     ) {
         val style = MaterialTheme.typography.labelSmall
         val color = MaterialTheme.colorScheme.onSurfaceVariant
-        Text(stringResource(R.string.detail_splits_column_split), style = style, color = color, modifier = Modifier.weight(0.8f))
+        val splitColumn = if (LocalFormatter.current.units == UnitSystem.IMPERIAL) {
+            R.string.detail_splits_column_split_imperial
+        } else {
+            R.string.detail_splits_column_split
+        }
+        Text(stringResource(splitColumn), style = style, color = color, modifier = Modifier.weight(0.8f))
         Text(stringResource(R.string.detail_splits_column_time), style = style, color = color, modifier = Modifier.weight(1f))
         Text(stringResource(R.string.detail_splits_column_speed), style = style, color = color, modifier = Modifier.weight(1.2f))
         Text(stringResource(R.string.detail_splits_column_gain), style = style, color = color, modifier = Modifier.weight(1f))
@@ -427,6 +446,7 @@ private fun SplitHeaderRow() {
 
 @Composable
 private fun SplitRowContent(split: SplitRow) {
+    val format = LocalFormatter.current
     Row(
         modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -439,16 +459,16 @@ private fun SplitRowContent(split: SplitRow) {
             // a full kilometre, which would make its pace meaningless.
             if (split.isPartial) {
                 Text(
-                    Format.distance(split.distance),
+                    format.distance(split.distance),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
         }
-        Text(Format.duration(split.movingSeconds), style = style, maxLines = 1, modifier = Modifier.weight(1f))
-        Text(Format.speed(split.averageSpeed), style = style, maxLines = 1, modifier = Modifier.weight(1.2f))
-        Text(Format.elevation(split.elevationGain), style = style, maxLines = 1, modifier = Modifier.weight(1f))
+        Text(format.duration(split.movingSeconds), style = style, maxLines = 1, modifier = Modifier.weight(1f))
+        Text(format.speed(split.averageSpeed), style = style, maxLines = 1, modifier = Modifier.weight(1.2f))
+        Text(format.elevation(split.elevationGain), style = style, maxLines = 1, modifier = Modifier.weight(1f))
     }
 }
 

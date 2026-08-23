@@ -150,14 +150,17 @@
 
     <!-- Activity detail — splits table. -->
     <string name="detail_splits_title">Per-kilometre splits</string>
+    <!-- Imperial: the ride is re-lapped at miles, not relabelled, so the wording changes too. -->
+    <string name="detail_splits_title_imperial">Per-mile splits</string>
     <string name="detail_splits_empty">Too short to split.</string>
     <string name="detail_splits_column_split">km</string>
+    <string name="detail_splits_column_split_imperial">mi</string>
     <string name="detail_splits_column_time">Time</string>
     <string name="detail_splits_column_speed">Speed</string>
     <string name="detail_splits_column_gain">Gain</string>
     <!-- %1$d is the split number, e.g. the 3rd kilometre. -->
     <string name="detail_splits_row_cd">Kilometre %1$d</string>
-    <!-- Marks a final split shorter than a full kilometre; %1$s is its real length. -->
+    <!-- Marks a final split shorter than a full lap; %1$s is its real length. -->
     <string name="detail_splits_partial">%1$s</string>
 
     <!-- Activity detail — editing. -->
@@ -235,8 +238,33 @@
         receiver, so the GPS rows below stay empty. Other diagnostics still work.</string>
     <string name="sensors_permission_grant">Grant location</string>
 
-    <!-- Placeholder tabs not yet built (Settings arrives later in M1.5). -->
-    <string name="placeholder_coming_soon">Coming soon</string>
-    <!-- %1$s is the screen name. -->
-    <string name="placeholder_screen_pending">The %1$s screen is being built.</string>
+    <!-- Settings. -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">Every setting here changes something. Options arrive
+        alongside the features that read them.</string>
+
+    <!-- Settings — units. -->
+    <string name="settings_group_units">Units</string>
+    <string name="settings_units_metric">Metric</string>
+    <string name="settings_units_metric_detail">Kilometres, metres, km/h</string>
+    <string name="settings_units_imperial">Imperial</string>
+    <string name="settings_units_imperial_detail">Miles, feet, mph</string>
+    <string name="settings_units_note">Changes how figures are displayed. Your recordings are
+        always stored in metric, so switching back and forth loses nothing.</string>
+
+    <!-- Settings — appearance. -->
+    <string name="settings_group_appearance">Appearance</string>
+    <string name="settings_theme_label">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_dynamic_colour_label">Material You colours</string>
+    <string name="settings_dynamic_colour_body">Take the palette from your wallpaper instead of
+        using Trailog\'s own green.</string>
+
+    <!-- Settings — recording. -->
+    <string name="settings_group_recording">Recording</string>
+    <string name="settings_keep_screen_on_label">Keep screen on while recording</string>
+    <string name="settings_keep_screen_on_body">Useful on a handlebar mount. Costs battery on long
+        rides, so it stays off unless you turn it on. Recording itself never needs the screen.</string>
 </resources>

@@ -41,7 +41,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.martinzitka.trailog.R
 import io.github.martinzitka.trailog.core.recording.RecordingState
-import io.github.martinzitka.trailog.ui.format.Format
+import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.record.RecordPermissions
 
 /**
@@ -248,54 +248,58 @@ private fun label(id: DiagnosticId): String = stringResource(
 )
 
 /**
- * Renders a value for display. Numbers go through [Format] — the single conversion point — and
- * prose comes from string resources. [id] is passed because one value type reads differently in
- * two places: battery optimisation is "exempt", not "granted".
+ * Renders a value for display. Numbers go through the ambient [Formatter] — the single conversion
+ * point, carrying the user's unit preference — and prose comes from string resources. [id] is
+ * passed because one value type reads differently in two places: battery optimisation is "exempt",
+ * not "granted".
  */
 @Composable
-private fun valueText(id: DiagnosticId, value: DiagnosticValue): String = when (value) {
-    DiagnosticValue.Waiting -> stringResource(R.string.sensors_value_waiting)
-    DiagnosticValue.Unavailable -> stringResource(R.string.sensors_value_unavailable)
-    is DiagnosticValue.Text -> value.value
-    is DiagnosticValue.Length -> Format.length(value.meters)
-    is DiagnosticValue.Age -> stringResource(
-        R.string.sensors_value_fix_age,
-        Format.elapsedSince(value.seconds),
-    )
-
-    is DiagnosticValue.Pressure -> Format.pressure(value.pascals)
-    is DiagnosticValue.Ratio -> if (value.outOf != null) {
-        stringResource(R.string.sensors_value_satellites, value.value, value.outOf)
-    } else {
-        stringResource(R.string.sensors_value_satellites_used_only, value.value)
-    }
-
-    is DiagnosticValue.Granted -> if (id == DiagnosticId.BATTERY_OPTIMISATION) {
-        stringResource(
-            if (value.granted) R.string.sensors_value_exempt else R.string.sensors_value_not_exempt,
+private fun valueText(id: DiagnosticId, value: DiagnosticValue): String {
+    val format = LocalFormatter.current
+    return when (value) {
+        DiagnosticValue.Waiting -> stringResource(R.string.sensors_value_waiting)
+        DiagnosticValue.Unavailable -> stringResource(R.string.sensors_value_unavailable)
+        is DiagnosticValue.Text -> value.value
+        is DiagnosticValue.Length -> format.length(value.meters)
+        is DiagnosticValue.Age -> stringResource(
+            R.string.sensors_value_fix_age,
+            format.elapsedSince(value.seconds),
         )
-    } else {
-        stringResource(
-            if (value.granted) R.string.sensors_value_granted else R.string.sensors_value_denied,
-        )
-    }
 
-    is DiagnosticValue.Running -> stringResource(
-        if (value.running) {
-            R.string.sensors_value_service_running
+        is DiagnosticValue.Pressure -> format.pressure(value.pascals)
+        is DiagnosticValue.Ratio -> if (value.outOf != null) {
+            stringResource(R.string.sensors_value_satellites, value.value, value.outOf)
         } else {
-            R.string.sensors_value_service_stopped
-        },
-    )
+            stringResource(R.string.sensors_value_satellites_used_only, value.value)
+        }
 
-    is DiagnosticValue.Session -> stringResource(
-        when (value.state) {
-            null -> R.string.sensors_session_none
-            RecordingState.IDLE -> R.string.sensors_session_idle
-            RecordingState.RECORDING -> R.string.sensors_session_recording
-            RecordingState.PAUSED -> R.string.sensors_session_paused
-            RecordingState.STOPPING -> R.string.sensors_session_stopping
-            RecordingState.RECOVERING -> R.string.sensors_session_recovering
-        },
-    )
+        is DiagnosticValue.Granted -> if (id == DiagnosticId.BATTERY_OPTIMISATION) {
+            stringResource(
+                if (value.granted) R.string.sensors_value_exempt else R.string.sensors_value_not_exempt,
+            )
+        } else {
+            stringResource(
+                if (value.granted) R.string.sensors_value_granted else R.string.sensors_value_denied,
+            )
+        }
+
+        is DiagnosticValue.Running -> stringResource(
+            if (value.running) {
+                R.string.sensors_value_service_running
+            } else {
+                R.string.sensors_value_service_stopped
+            },
+        )
+
+        is DiagnosticValue.Session -> stringResource(
+            when (value.state) {
+                null -> R.string.sensors_session_none
+                RecordingState.IDLE -> R.string.sensors_session_idle
+                RecordingState.RECORDING -> R.string.sensors_session_recording
+                RecordingState.PAUSED -> R.string.sensors_session_paused
+                RecordingState.STOPPING -> R.string.sensors_session_stopping
+                RecordingState.RECOVERING -> R.string.sensors_session_recovering
+            },
+        )
+    }
 }
