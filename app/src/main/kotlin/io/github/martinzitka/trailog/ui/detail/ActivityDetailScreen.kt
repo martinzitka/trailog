@@ -64,6 +64,7 @@ import io.github.martinzitka.trailog.ui.chart.ProfileChart
 import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.format.UnitSystem
 import io.github.martinzitka.trailog.ui.format.label
+import io.github.martinzitka.trailog.ui.map.MapInteraction
 import io.github.martinzitka.trailog.ui.map.RouteMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -74,20 +75,22 @@ import kotlinx.coroutines.withContext
  * per-kilometre splits, and the edit, delete and export actions. Pushed from History.
  *
  * Everything on this screen is read from the on-device database and works with no network at all.
- * The map is the placeholder route renderer until M1.6 brings MapLibre, so "no cached tiles" is
- * already the only case there is: the route draws over a blank surface rather than erroring.
+ * The map is a preview: it renders over self-hosted tiles when a region archive is installed and
+ * over a blank surface when none is, and a tap opens the fullscreen map.
  *
  * Android-specific work stays here at the edge — the export destination is chosen through the
  * system document picker, so a GPX file lands wherever the user says and nothing is written to
  * shared storage behind their back.
  *
  * @param onBack pop back to History. Also called automatically once the activity is deleted.
+ * @param onOpenMap open the fullscreen map, where panning, zooming and the linked charts live.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActivityDetailScreen(
     viewModel: ActivityDetailViewModel,
     onBack: () -> Unit,
+    onOpenMap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Hoisted out of the composable scope so the export lambda below can capture it: a
@@ -181,7 +184,10 @@ fun ActivityDetailScreen(
 
                 is ActivityDetailUiState.Gone -> GoneContent(onBack = onBack)
 
-                is ActivityDetailUiState.Loaded -> LoadedContent(detail = s.detail)
+                is ActivityDetailUiState.Loaded -> LoadedContent(
+                    detail = s.detail,
+                    onOpenMap = onOpenMap,
+                )
             }
         }
     }
@@ -273,12 +279,15 @@ private fun GoneContent(onBack: () -> Unit) {
 }
 
 @Composable
-private fun LoadedContent(detail: ActivityDetail) {
+private fun LoadedContent(detail: ActivityDetail, onOpenMap: () -> Unit) {
     val format = LocalFormatter.current
+    // Hoisted so the map preview can drive it: a drag over the map has to scroll the page, and
+    // the MapView will not pass one on by itself (see MapInteraction.Tap).
+    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -288,11 +297,17 @@ private fun LoadedContent(detail: ActivityDetail) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
+        // A preview, not a pannable map: a drag over it scrolls the page like a drag anywhere
+        // else, and a tap opens the fullscreen map where zooming into a climb or a junction
+        // belongs. Panning here instead used to mean the page could not be scrolled from the
+        // map, and that a single-finger drag was claimed by whichever of the two gesture
+        // handlers happened to win.
         RouteMap(
             segments = detail.segments,
             contentDescription = stringResource(R.string.detail_map_cd),
             showEndMarker = false,
             emptyLabel = stringResource(R.string.detail_map_empty),
+            interaction = MapInteraction.Tap(onClick = onOpenMap, hostScroll = scrollState),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(MAP_HEIGHT),

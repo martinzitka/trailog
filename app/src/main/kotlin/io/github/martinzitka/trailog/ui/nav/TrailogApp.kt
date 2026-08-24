@@ -27,6 +27,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import io.github.martinzitka.trailog.ui.detail.ActivityDetailScreen
 import io.github.martinzitka.trailog.ui.detail.ActivityDetailViewModel
+import io.github.martinzitka.trailog.ui.detail.ActivityMapScreen
 import io.github.martinzitka.trailog.ui.format.Formatter
 import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.history.HistoryScreen
@@ -98,9 +99,15 @@ private fun TrailogNavigation() {
         }
     }
 
+    // The fullscreen map hides the bar rather than dimming it: it is a map you pan and zoom, and
+    // a navigation bar across the bottom of it is both a smaller map and a row of targets sitting
+    // exactly where a thumb drags.
+    val fullscreen = currentDestination?.route in Routes.fullscreen
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
+            if (fullscreen) return@Scaffold
             NavigationBar {
                 TopLevelDestination.entries.forEach { dest ->
                     val selected = currentDestination?.hierarchy?.any { it.route == dest.route } == true
@@ -164,6 +171,25 @@ private fun TrailogNavigation() {
                 )
                 ActivityDetailScreen(
                     viewModel = detailViewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenMap = { navController.navigate(Routes.activityMap(activityId)) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(
+                route = Routes.ACTIVITY_MAP,
+                arguments = listOf(navArgument(Routes.ARG_ACTIVITY_ID) { type = NavType.StringType }),
+            ) { entry ->
+                val context = LocalContext.current
+                val activityId = entry.arguments?.getString(Routes.ARG_ACTIVITY_ID).orEmpty()
+                // Its own ViewModel instance, scoped to this back-stack entry. The detail screen's
+                // one belongs to the entry underneath and would outlive nothing useful here; the
+                // cost is one recompute of the profiles, off the main thread.
+                val mapViewModel: ActivityDetailViewModel = viewModel(
+                    factory = ActivityDetailViewModel.Factory(context, activityId),
+                )
+                ActivityMapScreen(
+                    viewModel = mapViewModel,
                     onBack = { navController.popBackStack() },
                     modifier = Modifier.fillMaxSize(),
                 )

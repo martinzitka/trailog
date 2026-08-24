@@ -10,6 +10,7 @@ import io.github.martinzitka.trailog.core.model.Activity
 import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.core.model.Segment
 import io.github.martinzitka.trailog.core.stats.Statistics
+import io.github.martinzitka.trailog.core.stats.TrackIndex
 import io.github.martinzitka.trailog.core.stats.TrackProfile
 import io.github.martinzitka.trailog.data.ActivityRepository
 import io.github.martinzitka.trailog.data.ActivityWithStats
@@ -152,6 +153,9 @@ class ActivityDetailViewModel(
             },
             elevationProfile = TrackProfile.elevation(segments),
             speedProfile = TrackProfile.speed(segments),
+            // Built here rather than in the map screen so it is produced on [computeDispatcher]
+            // with the profiles it has to agree with, off the main thread.
+            track = TrackIndex.of(segments),
             splits = splitsOf(segments, type, splitInterval),
             statsPending = cached == null,
         )

@@ -231,6 +231,12 @@ States: loading, loaded, map tiles unavailable offline.
 
 #### 6. Linked charts
 
+Both live on the **fullscreen map**, opened by tapping the map preview on Activity detail:
+the route with pan and zoom, and one chart beneath it carrying elevation on the left axis
+and speed on the right, each with a visibility toggle. The selection is held as a distance
+along the ride, not as a coordinate — a loop passes the same junction twice, so a
+coordinate does not identify a moment.
+
 - [ ] Touching or dragging the elevation or speed chart marks the corresponding position
       on the map.
 - [ ] Selecting a position on the map marks the corresponding point on both charts.
@@ -397,5 +403,16 @@ Two people ride together; one forgot to record. Not a social feature.
 - Photos attached to activities.
 - Hillshading and contour lines in the self-hosted tile style; rendering Czech KČT trail
   waymarks from OSM `osmc:symbol` relations.
+- **A self-hosted tile service, shared by more than one client.** On-device PMTiles cover
+  the region the user built; outside it there is nothing. The intended answer is the
+  user's own tile server — the same host the backend runs on — serving the archives the
+  phone falls back to when it leaves its downloaded region, with the style catalogue
+  alongside them so a client can offer a choice of styles.
+
+  The reason it is worth designing as a service rather than as a Trailog endpoint: a
+  standalone map viewer app (browse and switch styles, no tracking) would want exactly the
+  same thing, and one server can feed both. Trailog's map layer already goes through
+  `MapSource` (ADR 0015), so a remote source is a new variant rather than a rewrite. No
+  third-party egress either way — every host involved is the user's own.
 - TOTP MFA.
 - iOS, once Apple hardware exists.

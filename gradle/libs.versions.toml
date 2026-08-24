@@ -15,6 +15,7 @@ robolectric = "4.14.1"
 androidxTestCore = "1.6.1"
 kotlinxDatetime = "0.6.1"
 turbine = "1.2.0"
+maplibre = "11.11.0"
 
 [libraries]
 # --- :core (pure Kotlin/JVM) ---
@@ -47,6 +48,10 @@ androidx-navigation-compose = { module = "androidx.navigation:navigation-compose
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+
+# Maps. MapLibre Native renders the self-hosted vector tiles built by infra/tiles (ADR 0015).
+# Chosen over the Google Maps SDK, which CLAUDE.md rules out outright.
+maplibre-android = { module = "org.maplibre.gl:android-sdk", version.ref = "maplibre" }
 
 # --- :app tests (JVM, Robolectric) ---
 junit4 = { module = "junit:junit", version.ref = "junit4" }

@@ -29,3 +29,14 @@ Thumbs.db
 *.aab
 *.ap_
 *.dex
+
+# Map tile build — inputs and outputs are hundreds of MB to tens of GB.
+# Reproduced by infra/tiles/build-tiles.sh, never committed.
+infra/tiles/work/
+infra/tiles/dist/
+# Planetiler resolves this relative to its working directory. build-tiles.sh keeps it out of
+# the repo; this is the safety net if it is ever run from a checkout by hand.
+/data/
+*.osm.pbf
+*.pmtiles
+*.mbtiles

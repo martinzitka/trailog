@@ -53,7 +53,7 @@ class ActivityDetailScreenTest {
 
     @Test fun `the summary shows every figure the plan requires`() {
         val vm = viewModel()
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithText("Distance").assertIsDisplayed()
         composeRule.onNodeWithText("Elapsed time").assertIsDisplayed()
@@ -69,7 +69,7 @@ class ActivityDetailScreenTest {
 
     @Test fun `the splits table renders per-kilometre rows`() {
         val vm = viewModel()
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         // The page scrolls; the splits table sits below the map, summary and charts.
         composeRule.onNodeWithText("Per-kilometre splits").performScrollTo().assertIsDisplayed()
@@ -81,7 +81,7 @@ class ActivityDetailScreenTest {
 
     @Test fun `both charts are rendered and described for a screen reader`() {
         val vm = viewModel()
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         // The map is at the top, so it is checked before anything scrolls the page down.
         composeRule.onNodeWithContentDescription("Map of the recorded route").assertIsDisplayed()
@@ -94,7 +94,7 @@ class ActivityDetailScreenTest {
 
     @Test fun `an activity with no altitude says so instead of drawing an empty box`() {
         val vm = viewModel(points = ride(altitudeAt = { null }))
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithText("No altitude was recorded for this activity.")
             .performScrollTo().assertIsDisplayed()
@@ -105,7 +105,7 @@ class ActivityDetailScreenTest {
     @Test fun `delete requires confirmation`() {
         var deleted = false
         val vm = viewModel(onDelete = { deleted = true; true })
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithContentDescription("Delete activity").performClick()
 
@@ -120,7 +120,7 @@ class ActivityDetailScreenTest {
     @Test fun `dismissing the delete confirmation keeps the activity`() {
         var deleted = false
         val vm = viewModel(onDelete = { deleted = true; true })
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithContentDescription("Delete activity").performClick()
         composeRule.onNodeWithText("Keep").performClick()
@@ -135,7 +135,7 @@ class ActivityDetailScreenTest {
         var wentBack = false
         val vm = viewModel(rows = rows, onDelete = { rows.value = null; true })
         composeRule.setContent {
-            TrailogTheme { ActivityDetailScreen(vm, onBack = { wentBack = true }) }
+            TrailogTheme { ActivityDetailScreen(vm, onBack = { wentBack = true }, onOpenMap = {}) }
         }
 
         composeRule.onNodeWithContentDescription("Delete activity").performClick()
@@ -150,7 +150,7 @@ class ActivityDetailScreenTest {
     @Test fun `name, notes and type are editable and the edit is saved`() {
         val saved = mutableListOf<Triple<String, String?, ActivityType>>()
         val vm = viewModel(onSave = { name, notes, type -> saved += Triple(name, notes, type) })
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithContentDescription("Edit activity").performClick()
         composeRule.onNodeWithText("Edit activity").assertIsDisplayed()
@@ -172,13 +172,26 @@ class ActivityDetailScreenTest {
     @Test fun `cancelling an edit saves nothing`() {
         val saved = mutableListOf<Triple<String, String?, ActivityType>>()
         val vm = viewModel(onSave = { name, notes, type -> saved += Triple(name, notes, type) })
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithContentDescription("Edit activity").performClick()
         composeRule.onNodeWithText("Cancel").performClick()
         composeRule.waitForIdle()
 
         assertTrue(saved.isEmpty())
+    }
+
+    @Test fun `tapping the map asks for the fullscreen one`() {
+        var opened = false
+        val vm = viewModel()
+        composeRule.setContent {
+            TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = { opened = true }) }
+        }
+
+        composeRule.onNodeWithContentDescription("Map of the recorded route").performClick()
+        composeRule.waitForIdle()
+
+        assertTrue("the embedded map is a preview; tapping it opens the real one", opened)
     }
 
     // ---- navigation --------------------------------------------------------------------------
@@ -198,7 +211,11 @@ class ActivityDetailScreenTest {
                         route = "activity/{activityId}",
                         arguments = listOf(navArgument("activityId") { type = NavType.StringType }),
                     ) {
-                        ActivityDetailScreen(vm, onBack = { navController.popBackStack() })
+                        ActivityDetailScreen(
+                            vm,
+                            onBack = { navController.popBackStack() },
+                            onOpenMap = {},
+                        )
                     }
                 }
             }
