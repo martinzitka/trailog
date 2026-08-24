@@ -7,6 +7,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 
@@ -397,5 +398,40 @@ class TrackProfileTest {
         assertFailsWith<IllegalArgumentException> {
             TrackProfile.elevation(Segment.segmentsOf(line(10) { 300.0 }), maxSamples = 1)
         }
+    }
+
+    // ---- reading a value off the series -------------------------------------------------------
+
+    @Test
+    fun `valueAt reads the plotted value nearest a distance`() {
+        val points = line(200, altitudeAt = { 300.0 + it })
+        val profile = TrackProfile.elevation(
+            Segment.segmentsOf(points),
+            params = ElevationParams(smoothingWindow = 1),
+        )
+
+        // ~7.15 m per hop, so ~715 m in is around the hundredth fix and its 400 m altitude.
+        val value = assertNotNull(profile.valueAt(715.0))
+
+        assertTrue(
+            abs(value - 400.0) < 5.0,
+            "the cursor must read the curve it is pointing at, not something else; was $value",
+        )
+    }
+
+    @Test
+    fun `valueAt clamps to the ends rather than returning nothing`() {
+        val profile = TrackProfile.elevation(
+            Segment.segmentsOf(line(50, altitudeAt = { 300.0 + it })),
+            params = ElevationParams(smoothingWindow = 1),
+        )
+
+        assertEquals(profile.minValue, profile.valueAt(-1_000.0))
+        assertEquals(profile.maxValue, profile.valueAt(1_000_000.0))
+    }
+
+    @Test
+    fun `valueAt has nothing to say about an empty series`() {
+        assertNull(ProfileSeries.EMPTY.valueAt(100.0))
     }
 }
