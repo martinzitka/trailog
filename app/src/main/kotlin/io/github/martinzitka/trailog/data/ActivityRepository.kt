@@ -23,6 +23,7 @@ class ActivityRepository(
     private val activities: ActivityDao,
     private val points: RawPointDao,
     private val stats: ActivityStatsDao,
+    private val sessions: RecordingSessionDao,
     private val now: () -> Long,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
@@ -30,6 +31,7 @@ class ActivityRepository(
         activities = db.activityDao(),
         points = db.rawPointDao(),
         stats = db.activityStatsDao(),
+        sessions = db.recordingSessionDao(),
         now = now,
         inTransaction = { block -> db.withTransaction(block) },
     )
@@ -82,14 +84,22 @@ class ActivityRepository(
     }
 
     /**
-     * Delete an activity outright: its metadata, its cached statistics and **its raw points**.
-     * Returns false and touches nothing when no such activity exists.
+     * Delete an activity outright: its metadata, its cached statistics, **its raw points**, and
+     * any recording session row that still points at it. Returns false and touches nothing when
+     * no such activity exists.
      *
      * This is the one path that removes raw points, and only ever at the user's explicit request
      * (the detail screen confirms first). "Raw points are immutable and sacred" binds the app, not
      * the person whose location history it is — keeping the fixes of a ride the user deleted would
-     * mean holding coordinates they believe are gone. All three deletes run in one transaction so
-     * a crash mid-delete cannot leave an activity without its points or points without an activity.
+     * mean holding coordinates they believe are gone. Every delete runs in one transaction so a
+     * crash mid-delete cannot leave an activity without its points or points without an activity.
+     *
+     * The session row is included because leaving it behind produced a session pointing at
+     * nothing: harmless in the end — startup recovery finalises it and both of its steps tolerate
+     * a missing activity — but it made the app do recovery work on the next launch for a ride the
+     * user had already thrown away. Deleting a recording that is *in progress* is a separate
+     * matter and is not defended against here: the running service still holds the session in
+     * memory and its next heartbeat writes the row back.
      */
     suspend fun delete(activityId: String): Boolean {
         if (activities.byId(activityId) == null) return false
@@ -97,6 +107,7 @@ class ActivityRepository(
             // Stats cascade from the activity row's foreign key; points have no FK and go first
             // so no window exists where the activity is gone but its coordinates remain.
             points.deleteFor(activityId)
+            sessions.delete(activityId)
             activities.delete(activityId)
         }
         return true
