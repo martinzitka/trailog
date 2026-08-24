@@ -48,6 +48,19 @@ class Formatter(val units: UnitSystem = UnitSystem.METRIC) {
         }
     }
 
+    /**
+     * A split interval stated in whole laps of the display unit: "1 km", "5 mi".
+     *
+     * Takes a lap count rather than metres because that is what it is — the ride is re-lapped at
+     * that distance, not converted (ADR 0014). Formatting `5000.0` through [distance] would print
+     * "5.00 km", which is a measurement of something; a chip needs a name for an interval.
+     */
+    fun laps(count: Int): String = String.format(
+        Locale.getDefault(),
+        if (imperial) "%d mi" else "%d km",
+        count,
+    )
+
     /** An elevation figure (gain, loss, altitude) in metres, to the nearest whole metre or foot. */
     fun elevation(meters: Double): String = if (imperial) {
         String.format(Locale.getDefault(), "%.0f ft", meters / METERS_PER_FOOT)

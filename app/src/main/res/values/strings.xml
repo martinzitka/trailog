@@ -151,12 +151,11 @@
     <string name="detail_chart_no_speed">Not enough fixes to plot a speed profile.</string>
 
     <!-- Activity detail — splits table. -->
-    <string name="detail_splits_title">Per-kilometre splits</string>
-    <!-- Imperial: the ride is re-lapped at miles, not relabelled, so the wording changes too. -->
-    <string name="detail_splits_title_imperial">Per-mile splits</string>
-    <string name="detail_splits_empty">Too short to split.</string>
-    <string name="detail_splits_column_split">km</string>
-    <string name="detail_splits_column_split_imperial">mi</string>
+    <!-- The interval is named by the chips under this heading, not by the heading, so that it
+         stays true at 5 km and in imperial alike. -->
+    <string name="detail_splits_title">Splits</string>
+    <string name="detail_splits_empty">Too short to split at this interval.</string>
+    <string name="detail_splits_column_split">Split</string>
     <string name="detail_splits_column_time">Time</string>
     <string name="detail_splits_column_speed">Speed</string>
     <string name="detail_splits_column_gain">Gain</string>

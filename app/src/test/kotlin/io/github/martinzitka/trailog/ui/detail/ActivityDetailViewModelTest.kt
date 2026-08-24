@@ -25,6 +25,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -204,14 +205,14 @@ class ActivityDetailViewModelTest {
             val vm = viewModel(
                 rows = MutableStateFlow(row()),
                 points = ride(count = 350),
-                splitInterval = flowOf(ActivityDetailViewModel.SPLIT_DISTANCE_IMPERIAL),
+                lapDistance = flowOf(ActivityDetailViewModel.LAP_DISTANCE_IMPERIAL),
             )
             collecting(vm) {
                 val splits = loaded(vm).splits
 
                 assertEquals("~2.5 km is one full mile plus a remainder", 2, splits.size)
                 assertEquals(
-                    ActivityDetailViewModel.SPLIT_DISTANCE_IMPERIAL,
+                    ActivityDetailViewModel.LAP_DISTANCE_IMPERIAL,
                     splits[0].distance,
                     1.0,
                 )
@@ -222,16 +223,16 @@ class ActivityDetailViewModelTest {
 
     @Test fun `changing the unit preference re-computes the splits while the screen is open`() =
         runTest(dispatcher) {
-            val interval = MutableStateFlow(ActivityDetailViewModel.SPLIT_DISTANCE_METRIC)
+            val interval = MutableStateFlow(ActivityDetailViewModel.LAP_DISTANCE_METRIC)
             val vm = viewModel(
                 rows = MutableStateFlow(row()),
                 points = ride(count = 350),
-                splitInterval = interval,
+                lapDistance = interval,
             )
             collecting(vm) {
                 assertEquals(3, loaded(vm).splits.size)
 
-                interval.value = ActivityDetailViewModel.SPLIT_DISTANCE_IMPERIAL
+                interval.value = ActivityDetailViewModel.LAP_DISTANCE_IMPERIAL
                 testScheduler.advanceUntilIdle()
 
                 assertEquals(
@@ -241,6 +242,74 @@ class ActivityDetailViewModelTest {
                 )
             }
         }
+
+    @Test fun `the ride starts lapped at one kilometre`() = runTest(dispatcher) {
+        val vm = viewModel(rows = MutableStateFlow(row()), points = ride(count = 350))
+        collecting(vm) {
+            assertEquals(1, loaded(vm).splitLaps)
+        }
+    }
+
+    @Test fun `choosing a longer interval re-laps the ride rather than summing rows`() =
+        runTest(dispatcher) {
+            // ~2.5 km: three kilometre splits become one full 2 km split and a remainder.
+            val vm = viewModel(rows = MutableStateFlow(row()), points = ride(count = 350))
+            collecting(vm) {
+                assertEquals(3, loaded(vm).splits.size)
+
+                vm.setSplitLaps(2)
+                testScheduler.advanceUntilIdle()
+
+                val splits = loaded(vm).splits
+                assertEquals(2, loaded(vm).splitLaps)
+                assertEquals(2, splits.size)
+                assertEquals(2_000.0, splits[0].distance, 1.0)
+                assertFalse("a full 2 km lap is not partial", splits[0].isPartial)
+                assertTrue("the tail is short of 2 km", splits[1].isPartial)
+            }
+        }
+
+    @Test fun `an interval longer than the ride leaves one partial split, not none`() =
+        runTest(dispatcher) {
+            // The state that would otherwise strand the reader: pick 10 km on a 2.5 km ride and
+            // the table must still say something, and the chips must still be selectable.
+            val vm = viewModel(rows = MutableStateFlow(row()), points = ride(count = 350))
+            collecting(vm) {
+                vm.setSplitLaps(10)
+                testScheduler.advanceUntilIdle()
+
+                val splits = loaded(vm).splits
+                assertEquals(1, splits.size)
+                assertTrue("the whole ride is one short lap", splits[0].isPartial)
+            }
+        }
+
+    @Test fun `the interval multiplies whichever lap the unit preference chose`() =
+        runTest(dispatcher) {
+            val vm = viewModel(
+                rows = MutableStateFlow(row()),
+                points = ride(count = 900),
+                lapDistance = flowOf(ActivityDetailViewModel.LAP_DISTANCE_IMPERIAL),
+            )
+            collecting(vm) {
+                vm.setSplitLaps(2)
+                testScheduler.advanceUntilIdle()
+
+                val splits = loaded(vm).splits
+                assertEquals(
+                    "two laps of a mile, not two kilometres",
+                    2 * ActivityDetailViewModel.LAP_DISTANCE_IMPERIAL,
+                    splits[0].distance,
+                    1.0,
+                )
+            }
+        }
+
+    @Test fun `an interval nobody offers is rejected rather than silently accepted`() {
+        val vm = viewModel(rows = MutableStateFlow(row()), points = ride(count = 350))
+
+        assertThrows(IllegalArgumentException::class.java) { vm.setSplitLaps(3) }
+    }
 
     @Test fun `per-split elevation sums to the activity total`() = runTest(dispatcher) {
         val vm = viewModel(
@@ -326,7 +395,7 @@ class ActivityDetailViewModelTest {
         points: List<RawPoint>,
         onSave: (String, String, String?, ActivityType) -> Unit = { _, _, _, _ -> },
         onDelete: (String) -> Boolean = { true },
-        splitInterval: Flow<Double> = flowOf(ActivityDetailViewModel.SPLIT_DISTANCE_METRIC),
+        lapDistance: Flow<Double> = flowOf(ActivityDetailViewModel.LAP_DISTANCE_METRIC),
     ) = ActivityDetailViewModel(
         activityId = ACTIVITY_ID,
         row = rows,
@@ -340,7 +409,7 @@ class ActivityDetailViewModelTest {
         },
         saveMetadata = { id, name, notes, type -> onSave(id, name, notes, type) },
         deleteActivity = { id -> onDelete(id) },
-        splitInterval = splitInterval,
+        lapDistance = lapDistance,
         computeDispatcher = dispatcher,
     )
 

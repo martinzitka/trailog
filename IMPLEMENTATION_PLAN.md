@@ -207,6 +207,9 @@ States: loading, loaded, map tiles unavailable offline.
 - [ ] Elevation and speed charts render a 4-hour activity without visible jank.
 - [ ] Summary shows distance, elapsed time, moving time, elevation gain and loss, average
       and maximum speed, and per-kilometre splits.
+- [ ] The splits interval is selectable — 1, 2, 5 or 10 laps of the display unit, defaulting
+      to one. Picking a longer interval re-laps the ride in `:core` rather than summing
+      kilometre rows, exactly as the imperial preference does (ADR 0014).
 - [ ] Gaps between segments are visible on the map and charts as breaks, never as straight
       lines joining the ends.
 - [ ] Name, notes and activity type are editable and changes persist.

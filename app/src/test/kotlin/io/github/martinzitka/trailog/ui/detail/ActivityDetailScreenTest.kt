@@ -72,11 +72,47 @@ class ActivityDetailScreenTest {
         composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         // The page scrolls; the splits table sits below the map, summary and charts.
-        composeRule.onNodeWithText("Per-kilometre splits").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Splits").performScrollTo().assertIsDisplayed()
         // "Gain", not "Speed": the latter is also the speed chart's title.
         composeRule.onNodeWithText("Gain").performScrollTo().assertIsDisplayed()
         // ~2.5 km of ride is two full kilometres and a remainder, numbered from one.
         composeRule.onNodeWithText("3").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun `the splits interval can be changed and the table follows`() {
+        val vm = viewModel()
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
+
+        // ~2.5 km lapped at 1 km is three rows; the third is the remainder.
+        composeRule.onNodeWithText("3").performScrollTo().assertIsDisplayed()
+
+        composeRule.onNodeWithContentDescription("2 km").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        // Two 2 km rows now, so there is no third.
+        composeRule.onNodeWithText("2").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("3").assertDoesNotExist()
+    }
+
+    @Test fun `every offered interval is reachable, in the reader's own units`() {
+        val vm = viewModel()
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
+
+        for (label in listOf("1 km", "2 km", "5 km", "10 km")) {
+            composeRule.onNodeWithContentDescription(label).performScrollTo().assertIsDisplayed()
+        }
+    }
+
+    @Test fun `an interval longer than the ride still says something`() {
+        val vm = viewModel()
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
+
+        composeRule.onNodeWithContentDescription("10 km").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        // One partial split rather than an empty table — and the chips are still there to go back.
+        composeRule.onNodeWithText("1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("1 km").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun `both charts are rendered and described for a screen reader`() {
@@ -127,7 +163,7 @@ class ActivityDetailScreenTest {
         composeRule.waitForIdle()
 
         assertFalse(deleted)
-        composeRule.onNodeWithText("Per-kilometre splits").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Splits").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun `a deleted activity leaves the screen`() {
@@ -222,7 +258,7 @@ class ActivityDetailScreenTest {
         }
 
         composeRule.onNodeWithText("Open activity").performClick()
-        composeRule.onNodeWithText("Per-kilometre splits").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Splits").performScrollTo().assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription("Back").performClick()
         composeRule.onNodeWithText("Open activity").assertIsDisplayed()

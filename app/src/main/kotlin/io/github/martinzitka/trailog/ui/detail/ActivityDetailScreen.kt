@@ -55,6 +55,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -62,7 +64,6 @@ import io.github.martinzitka.trailog.R
 import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.ui.chart.ProfileChart
 import io.github.martinzitka.trailog.ui.format.LocalFormatter
-import io.github.martinzitka.trailog.ui.format.UnitSystem
 import io.github.martinzitka.trailog.ui.format.label
 import io.github.martinzitka.trailog.ui.map.MapInteraction
 import io.github.martinzitka.trailog.ui.map.RouteMap
@@ -187,6 +188,7 @@ fun ActivityDetailScreen(
                 is ActivityDetailUiState.Loaded -> LoadedContent(
                     detail = s.detail,
                     onOpenMap = onOpenMap,
+                    onSelectSplitLaps = viewModel::setSplitLaps,
                 )
             }
         }
@@ -279,7 +281,11 @@ private fun GoneContent(onBack: () -> Unit) {
 }
 
 @Composable
-private fun LoadedContent(detail: ActivityDetail, onOpenMap: () -> Unit) {
+private fun LoadedContent(
+    detail: ActivityDetail,
+    onOpenMap: () -> Unit,
+    onSelectSplitLaps: (Int) -> Unit,
+) {
     val format = LocalFormatter.current
     // Hoisted so the map preview can drive it: a drag over the map has to scroll the page, and
     // the MapView will not pass one on by itself (see MapInteraction.Tap).
@@ -351,7 +357,7 @@ private fun LoadedContent(detail: ActivityDetail, onOpenMap: () -> Unit) {
             contentDescription = stringResource(R.string.detail_chart_speed_cd),
         )
 
-        SplitsSection(detail)
+        SplitsSection(detail, onSelectSplitLaps)
     }
 }
 
@@ -407,20 +413,17 @@ private fun Figure(@StringRes labelRes: Int, value: String) {
 }
 
 @Composable
-private fun SplitsSection(detail: ActivityDetail) {
+private fun SplitsSection(detail: ActivityDetail, onSelectSplitLaps: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // The heading no longer names the interval, because the chips below it do — and at 5 km
+        // a "per-kilometre splits" heading would be a lie. The chips carry the unit, so an
+        // imperial reader is never shown kilometres either.
         Text(
-            // The heading follows the lap length the splits were actually computed at, so an
-            // imperial reader is never told "per-kilometre" above a table measured in miles.
-            stringResource(
-                if (LocalFormatter.current.units == UnitSystem.IMPERIAL) {
-                    R.string.detail_splits_title_imperial
-                } else {
-                    R.string.detail_splits_title
-                },
-            ),
+            stringResource(R.string.detail_splits_title),
             style = MaterialTheme.typography.titleMedium,
         )
+
+        SplitIntervalChips(selected = detail.splitLaps, onSelect = onSelectSplitLaps)
 
         if (detail.splits.isEmpty()) {
             Text(
@@ -439,6 +442,34 @@ private fun SplitsSection(detail: ActivityDetail) {
     }
 }
 
+/**
+ * The interval picker: 1, 2, 5 or 10 laps of the display unit.
+ *
+ * Always shown, even when the ride is too short to split at the chosen interval. Hiding them
+ * there would strand the reader: picking 10 km on a 3 km ride is exactly the moment they need a
+ * way back to 1 km.
+ */
+@Composable
+private fun SplitIntervalChips(selected: Int, onSelect: (Int) -> Unit) {
+    val format = LocalFormatter.current
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ActivityDetailViewModel.SPLIT_LAP_OPTIONS.forEach { laps ->
+            val label = format.laps(laps)
+            FilterChip(
+                selected = laps == selected,
+                onClick = { onSelect(laps) },
+                label = { Text(label) },
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .semantics { this.contentDescription = label },
+            )
+        }
+    }
+}
+
 @Composable
 private fun SplitHeaderRow() {
     Row(
@@ -447,12 +478,14 @@ private fun SplitHeaderRow() {
     ) {
         val style = MaterialTheme.typography.labelSmall
         val color = MaterialTheme.colorScheme.onSurfaceVariant
-        val splitColumn = if (LocalFormatter.current.units == UnitSystem.IMPERIAL) {
-            R.string.detail_splits_column_split_imperial
-        } else {
-            R.string.detail_splits_column_split
-        }
-        Text(stringResource(splitColumn), style = style, color = color, modifier = Modifier.weight(0.8f))
+        // "Split", not "km": the column counts splits, and at a 5 km interval row 3 is the third
+        // split rather than the third kilometre.
+        Text(
+            stringResource(R.string.detail_splits_column_split),
+            style = style,
+            color = color,
+            modifier = Modifier.weight(0.8f),
+        )
         Text(stringResource(R.string.detail_splits_column_time), style = style, color = color, modifier = Modifier.weight(1f))
         Text(stringResource(R.string.detail_splits_column_speed), style = style, color = color, modifier = Modifier.weight(1.2f))
         Text(stringResource(R.string.detail_splits_column_gain), style = style, color = color, modifier = Modifier.weight(1f))

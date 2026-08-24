@@ -125,4 +125,14 @@ class FormatterTest {
         /** 2026-08-17 07:42 UTC. */
         const val RIDE_START = 1_786_952_520_000L
     }
+
+    // ---- split intervals -----------------------------------------------------------------------
+
+    @Test fun `a split interval is named in whole laps, not measured`() {
+        // "5 km", never "5.00 km": the chip names an interval, it does not report a distance.
+        assertEquals("1 km", Formatter(UnitSystem.METRIC).laps(1))
+        assertEquals("10 km", Formatter(UnitSystem.METRIC).laps(10))
+        assertEquals("1 mi", Formatter(UnitSystem.IMPERIAL).laps(1))
+        assertEquals("5 mi", Formatter(UnitSystem.IMPERIAL).laps(5))
+    }
 }
