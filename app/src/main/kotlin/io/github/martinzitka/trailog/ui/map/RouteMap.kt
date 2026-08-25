@@ -51,7 +51,8 @@ data class TracePoint(val latitude: Double, val longitude: Double)
  * **and** sits inside a scrolling container must suspend that scroll while a finger is down:
  * otherwise Compose's scroll gesture and MapLibre both chase every single-finger drag, and which
  * one wins varies from gesture to gesture. Making that obligation a field of the variant that
- * enables panning is what stops a caller taking the gestures without it.
+ * enables panning is what stops a caller taking the gestures without it. ADR 0016 records why
+ * both pairings are obligations rather than conveniences.
  */
 sealed interface MapInteraction {
 

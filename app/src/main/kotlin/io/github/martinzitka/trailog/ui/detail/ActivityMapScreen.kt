@@ -59,7 +59,8 @@ import io.github.martinzitka.trailog.ui.map.TracePoint
  * Keeping the selection as a distance rather than as a coordinate is what makes the link
  * single-valued. A track crosses itself — a loop ride passes the same junction twice — so a
  * coordinate does not identify a moment, and a chart cursor placed from one would jump between
- * the two passes. Distance along the ride always does.
+ * the two passes. Distance along the ride always does. ADR 0016 records the reasoning, along with
+ * why this is a destination of its own rather than a mode of the detail screen.
  *
  * @param onBack pop back to the detail screen. Also called automatically if the activity is
  *   deleted from under this screen.

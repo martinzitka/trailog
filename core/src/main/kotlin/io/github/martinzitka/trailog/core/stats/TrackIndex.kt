@@ -49,6 +49,9 @@ data class TrackPosition(
  *
  * Distances accumulate **within segments only**, exactly as [TrackProfile] and
  * [Statistics.distance] accumulate them, so a recording gap advances the axis by nothing.
+ *
+ * ADR 0016 records why a linked chart and map identify a moment by distance rather than by
+ * coordinate, which is what this exists to serve.
  */
 class TrackIndex private constructor(
     private val points: List<RawPoint>,
