@@ -16,6 +16,7 @@
     <string name="nav_sensors">Sensors</string>
     <string name="nav_settings">Settings</string>
     <string name="nav_activity_detail">Activity detail</string>
+    <string name="nav_activity_map">Route map</string>
 
     <!-- Activity types. -->
     <string name="activity_type_cycling">Cycling</string>
@@ -123,6 +124,7 @@
     <!-- Activity detail — map. -->
     <string name="detail_map_cd">Map of the recorded route</string>
     <string name="detail_map_empty">This activity has no recorded positions.</string>
+    <string name="detail_map_refit_cd">Zoom the map back to the whole route</string>
 
     <!-- Activity detail — summary figures. -->
     <string name="detail_summary_title">Summary</string>
@@ -149,12 +151,11 @@
     <string name="detail_chart_no_speed">Not enough fixes to plot a speed profile.</string>
 
     <!-- Activity detail — splits table. -->
-    <string name="detail_splits_title">Per-kilometre splits</string>
-    <!-- Imperial: the ride is re-lapped at miles, not relabelled, so the wording changes too. -->
-    <string name="detail_splits_title_imperial">Per-mile splits</string>
-    <string name="detail_splits_empty">Too short to split.</string>
-    <string name="detail_splits_column_split">km</string>
-    <string name="detail_splits_column_split_imperial">mi</string>
+    <!-- The interval is named by the chips under this heading, not by the heading, so that it
+         stays true at 5 km and in imperial alike. -->
+    <string name="detail_splits_title">Splits</string>
+    <string name="detail_splits_empty">Too short to split at this interval.</string>
+    <string name="detail_splits_column_split">Split</string>
     <string name="detail_splits_column_time">Time</string>
     <string name="detail_splits_column_speed">Speed</string>
     <string name="detail_splits_column_gain">Gain</string>
@@ -267,4 +268,16 @@
     <string name="settings_keep_screen_on_label">Keep screen on while recording</string>
     <string name="settings_keep_screen_on_body">Useful on a handlebar mount. Costs battery on long
         rides, so it stays off unless you turn it on. Recording itself never needs the screen.</string>
+
+    <!-- Fullscreen map and its linked charts. -->
+    <string name="map_open_fullscreen">Open the fullscreen map</string>
+    <string name="map_cursor_hint">Touch the chart or the map to inspect a point of the
+        ride.</string>
+    <string name="map_chart_cd">Elevation and speed against distance. Touch or drag to select a
+        point on the route.</string>
+    <string name="map_chart_empty">Nothing to plot for this activity.</string>
+
+    <!-- Map sources. Attribution is a licence condition, not decoration — see ADR 0015. -->
+    <string name="map_source_self_hosted">Self-hosted OpenStreetMap</string>
+    <string name="map_attribution_osm">© OpenStreetMap contributors</string>
 </resources>

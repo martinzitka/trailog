@@ -221,9 +221,43 @@ class ActivityRepositoryTest {
     }
 
     @Test
+    fun delete_takesTheRecordingSessionRowWithIt() = runTest {
+        // An activity interrupted mid-recording still has its session row. Deleting the ride and
+        // leaving the row behind left startup recovery finalising something that no longer
+        // existed — harmless, but work done on behalf of a ride the user threw away.
+        db.activityDao().upsert(activity(ID_A))
+        db.recordingSessionDao().upsert(session(ID_A))
+        insert(ID_A, segment = 0, time = 1_000, lat = 50.0, lon = 14.0)
+
+        assertTrue(repository.delete(ID_A))
+
+        assertNull("a deleted ride must leave no session pointing at it", db.recordingSessionDao().active())
+    }
+
+    @Test
+    fun delete_leavesAnotherActivitysSessionRowAlone() = runTest {
+        db.activityDao().upsert(activity(ID_A))
+        db.activityDao().upsert(activity(ID_B))
+        db.recordingSessionDao().upsert(session(ID_B))
+
+        repository.delete(ID_A)
+
+        assertEquals(ID_B, db.recordingSessionDao().active()?.activityId)
+    }
+
+    @Test
     fun delete_returnsFalse_forUnknownActivity() = runTest {
         assertFalse(repository.delete("nope"))
     }
+
+    private fun session(activityId: String) = RecordingSessionEntity(
+        activityId = activityId,
+        type = "CYCLING",
+        state = "RECORDING",
+        startTime = 1_000,
+        currentSegmentIndex = 0,
+        heartbeat = 1_000,
+    )
 
     private fun activity(id: String) = ActivityEntity(
         id = id,

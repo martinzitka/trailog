@@ -42,7 +42,7 @@ import kotlinx.datetime.Instant
  *
  * No coordinates are ever logged (CLAUDE.md).
  */
-class AndroidRecordingEngine private constructor(
+class AndroidRecordingEngine internal constructor(
     private val appContext: Context,
     db: TrailogDatabase,
 ) : RecordingEngine {
@@ -130,13 +130,26 @@ class AndroidRecordingEngine private constructor(
         current.apply(RecordingCommand.FINALIZE)
         _session.value = null
         val activityId = current.activityId.toString()
-        scope.launch {
-            sessions.delete(activityId)
-            // Fill the stats cache from the raw points now the activity is complete.
-            repository.recompute(activityId)
-        }
+        scope.launch { clearFinalisedSession(activityId) }
         Log.i(TAG, "finalize: session cleared")
         RecordingForegroundService.stop(appContext)
+    }
+
+    /**
+     * The durable half of finalising: drop the session row and fill the statistics cache from
+     * the raw points now the activity is complete.
+     *
+     * Separated from [finalize] so the recovery path can *await* it. Recovery that reported
+     * success while the delete was still in flight would leave the window it exists to close —
+     * a second interruption before the row is gone puts the app straight back into the wedge.
+     *
+     * Both steps tolerate an activity that no longer exists. Deleting a recording takes its
+     * session row with it, so that is no longer the ordinary way to produce one — but a session
+     * pointing at nothing is still a state recovery must survive rather than throw on.
+     */
+    private suspend fun clearFinalisedSession(activityId: String) {
+        sessions.delete(activityId)
+        repository.recompute(activityId)
     }
 
     override fun recoverResume() {
@@ -212,8 +225,33 @@ class AndroidRecordingEngine private constructor(
             }
             val persisted = entity.toDomain()
             _session.value = persisted
+
+            if (persisted.state == RecordingState.STOPPING) {
+                // Interrupted mid-save. The user already confirmed the stop, so the only
+                // unfinished work is the save itself — finish it rather than wait for a UI
+                // that has no action for this state.
+                //
+                // Deferring instead is what stranded the app: STOPPING renders as a bare
+                // "Saving activity…" spinner, so a crash or an OEM kill during finalisation
+                // made recording impossible forever, across restarts and reinstalls. Every
+                // other interrupted state either recovers automatically or offers the user a
+                // choice; this one had neither.
+                //
+                // Re-running finalisation is safe. It clears the session row and rebuilds the
+                // stats cache from raw points, both idempotent, and it tolerates an activity
+                // row that is already gone.
+                Log.i(TAG, "recovery: session was mid-save; completing finalisation")
+                // Validates STOPPING -> IDLE; throws for anything else.
+                persisted.apply(RecordingCommand.FINALIZE)
+                _session.value = null
+                clearFinalisedSession(persisted.activityId.toString())
+                RecordingForegroundService.stop(appContext)
+                startupRecoveryDone = true
+                return@withLock null
+            }
+
             if (!persisted.isInterrupted()) {
-                // STOPPING/RECOVERING already: leave it for the UI. Not an automatic recovery.
+                // RECOVERING: the UI offers Resume and Finish, so the user decides.
                 startupRecoveryDone = true
                 return@withLock null
             }
@@ -267,6 +305,9 @@ class AndroidRecordingEngine private constructor(
 
     companion object {
         private const val TAG = "TrailogRecording"
+
+        // The constructor is `internal` rather than `private` so recovery can be tested against
+        // an in-memory database. `get` remains the only way the app itself builds one.
 
         @Volatile
         private var instance: AndroidRecordingEngine? = null

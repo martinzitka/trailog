@@ -39,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,6 +57,8 @@ import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.format.icon
 import io.github.martinzitka.trailog.ui.format.label
+import io.github.martinzitka.trailog.ui.map.MapCameraMode
+import io.github.martinzitka.trailog.ui.map.MapInteraction
 import io.github.martinzitka.trailog.ui.map.RouteMap
 import io.github.martinzitka.trailog.ui.map.TracePoint
 import io.github.martinzitka.trailog.ui.settings.PrefsAppSettings
@@ -111,10 +114,16 @@ fun RecordScreen(
 
     var showStopConfirm by rememberSaveable { mutableStateOf(false) }
 
+    // The live map is pannable, and it lives inside this scrolling column. Compose's scroll
+    // gesture would otherwise claim every vertical drag before MapLibre saw it, so the map
+    // could only be panned sideways — half a map. Suspending the page scroll while a finger is
+    // on the map gives the gesture to whichever surface the user actually touched.
+    var mapTouched by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), enabled = !mapTouched)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -125,6 +134,7 @@ fun RecordScreen(
             )
 
             is RecordUiState.Ready -> ReadyContent(
+                onMapTouchedChange = { mapTouched = it },
                 state = s,
                 onSelectType = viewModel::selectType,
                 onStart = viewModel::start,
@@ -138,6 +148,7 @@ fun RecordScreen(
             )
 
             is RecordUiState.Recording -> ActiveContent(
+                onMapTouchedChange = { mapTouched = it },
                 type = s.activityType,
                 live = s.live,
                 segments = s.segments,
@@ -149,6 +160,7 @@ fun RecordScreen(
             )
 
             is RecordUiState.Paused -> ActiveContent(
+                onMapTouchedChange = { mapTouched = it },
                 type = s.activityType,
                 live = s.live,
                 segments = s.segments,
@@ -212,6 +224,7 @@ private fun PermissionsMissingContent(
 @Composable
 private fun ReadyContent(
     state: RecordUiState.Ready,
+    onMapTouchedChange: (Boolean) -> Unit,
     onSelectType: (ActivityType) -> Unit,
     onStart: () -> Unit,
     onRequestBackground: () -> Unit,
@@ -234,7 +247,7 @@ private fun ReadyContent(
         }
     }
 
-    LiveTraceMap(segments = emptyList())
+    LiveTraceMap(segments = emptyList(), onTouchedChange = onMapTouchedChange)
 
     Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Text(stringResource(R.string.record_start))
@@ -251,6 +264,7 @@ private fun ReadyContent(
 @Composable
 private fun ActiveContent(
     type: ActivityType,
+    onMapTouchedChange: (Boolean) -> Unit,
     live: LiveStats,
     segments: List<List<TracePoint>>,
     warnings: List<RecordWarning>,
@@ -268,7 +282,7 @@ private fun ActiveContent(
         Text(type.label(), style = MaterialTheme.typography.titleMedium)
     }
 
-    LiveTraceMap(segments = segments)
+    LiveTraceMap(segments = segments, onTouchedChange = onMapTouchedChange)
 
     LiveStatsGrid(live)
 
@@ -344,7 +358,10 @@ private fun InterruptedContent(
 // ---- pieces ------------------------------------------------------------------------------
 
 @Composable
-private fun LiveTraceMap(segments: List<List<TracePoint>>) {
+private fun LiveTraceMap(
+    segments: List<List<TracePoint>>,
+    onTouchedChange: (Boolean) -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth().height(220.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -354,6 +371,11 @@ private fun LiveTraceMap(segments: List<List<TracePoint>>) {
             modifier = Modifier.fillMaxSize(),
             contentDescription = stringResource(R.string.record_title),
             emptyLabel = stringResource(R.string.record_trace_empty),
+            // The live map follows the newest fix; panning away offers a re-centre control.
+            cameraMode = MapCameraMode.FOLLOW_END,
+            // The live map sits in a scrolling page, so the scroll is suspended while a finger
+            // is on it — otherwise Compose and MapLibre both chase the same drag.
+            interaction = MapInteraction.Gestures(onTouchedChange = onTouchedChange),
         )
     }
 }

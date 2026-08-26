@@ -2,6 +2,7 @@ package io.github.martinzitka.trailog.ui.detail
 
 import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.core.stats.ProfileSeries
+import io.github.martinzitka.trailog.core.stats.TrackIndex
 import io.github.martinzitka.trailog.ui.map.TracePoint
 
 /**
@@ -43,6 +44,11 @@ data class SplitRow(
  *   as a straight line joining the ends.
  * @property elevationProfile altitude against cumulative distance, per segment.
  * @property speedProfile ground speed against cumulative distance, per segment.
+ * @property track the same route prepared for lookup in both directions, which is what lets the
+ *   fullscreen map and its charts point at the same moment of the ride.
+ * @property splitLaps how many laps of the display unit each split covers — 1, 2, 5 or 10.
+ *   Carried in the state rather than held by the screen so the table and the chip that selects it
+ *   can never disagree about which interval is on screen.
  * @property statsPending true when the cached statistics row was missing and these figures were
  *   computed on the fly — the screen says so, because the recompute path will persist them later.
  */
@@ -64,7 +70,9 @@ data class ActivityDetail(
     val segments: List<List<TracePoint>>,
     val elevationProfile: ProfileSeries,
     val speedProfile: ProfileSeries,
+    val track: TrackIndex,
     val splits: List<SplitRow>,
+    val splitLaps: Int,
     val statsPending: Boolean,
 )
 

@@ -3,6 +3,7 @@ package io.github.martinzitka.trailog.core.stats
 import io.github.martinzitka.trailog.core.geo.Geo
 import io.github.martinzitka.trailog.core.model.RawPoint
 import io.github.martinzitka.trailog.core.model.Segment
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.time.DurationUnit
 
@@ -47,6 +48,31 @@ data class ProfileSeries(
 
     /** The x-extent: cumulative distance at the last plotted sample, in metres. */
     val maxDistance: Double = segments.flatten().maxOfOrNull { it.distance } ?: 0.0
+
+    /**
+     * The plotted value nearest [distance], or null when there is nothing plotted.
+     *
+     * This is what a chart cursor reads out, and it deliberately reports what is *drawn* rather
+     * than re-deriving the quantity from raw points: the series is smoothed and downsampled, so
+     * a raw figure would disagree with the curve the user is pointing at.
+     *
+     * Segments are searched together, so a distance falling inside a recording gap resolves to
+     * whichever side is nearer — the honest answer, since nothing was recorded in between.
+     */
+    fun valueAt(distance: Double): Double? {
+        var best: ProfileSample? = null
+        var bestGap = Double.MAX_VALUE
+        for (segment in segments) {
+            for (sample in segment) {
+                val gap = abs(sample.distance - distance)
+                if (gap < bestGap) {
+                    bestGap = gap
+                    best = sample
+                }
+            }
+        }
+        return best?.value
+    }
 
     companion object {
         val EMPTY = ProfileSeries(emptyList())

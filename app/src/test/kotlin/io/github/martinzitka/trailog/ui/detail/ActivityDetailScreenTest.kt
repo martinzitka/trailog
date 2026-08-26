@@ -53,7 +53,7 @@ class ActivityDetailScreenTest {
 
     @Test fun `the summary shows every figure the plan requires`() {
         val vm = viewModel()
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithText("Distance").assertIsDisplayed()
         composeRule.onNodeWithText("Elapsed time").assertIsDisplayed()
@@ -69,19 +69,55 @@ class ActivityDetailScreenTest {
 
     @Test fun `the splits table renders per-kilometre rows`() {
         val vm = viewModel()
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         // The page scrolls; the splits table sits below the map, summary and charts.
-        composeRule.onNodeWithText("Per-kilometre splits").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Splits").performScrollTo().assertIsDisplayed()
         // "Gain", not "Speed": the latter is also the speed chart's title.
         composeRule.onNodeWithText("Gain").performScrollTo().assertIsDisplayed()
         // ~2.5 km of ride is two full kilometres and a remainder, numbered from one.
         composeRule.onNodeWithText("3").performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun `the splits interval can be changed and the table follows`() {
+        val vm = viewModel()
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
+
+        // ~2.5 km lapped at 1 km is three rows; the third is the remainder.
+        composeRule.onNodeWithText("3").performScrollTo().assertIsDisplayed()
+
+        composeRule.onNodeWithContentDescription("2 km").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        // Two 2 km rows now, so there is no third.
+        composeRule.onNodeWithText("2").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("3").assertDoesNotExist()
+    }
+
+    @Test fun `every offered interval is reachable, in the reader's own units`() {
+        val vm = viewModel()
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
+
+        for (label in listOf("1 km", "2 km", "5 km", "10 km")) {
+            composeRule.onNodeWithContentDescription(label).performScrollTo().assertIsDisplayed()
+        }
+    }
+
+    @Test fun `an interval longer than the ride still says something`() {
+        val vm = viewModel()
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
+
+        composeRule.onNodeWithContentDescription("10 km").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        // One partial split rather than an empty table — and the chips are still there to go back.
+        composeRule.onNodeWithText("1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("1 km").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun `both charts are rendered and described for a screen reader`() {
         val vm = viewModel()
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         // The map is at the top, so it is checked before anything scrolls the page down.
         composeRule.onNodeWithContentDescription("Map of the recorded route").assertIsDisplayed()
@@ -94,7 +130,7 @@ class ActivityDetailScreenTest {
 
     @Test fun `an activity with no altitude says so instead of drawing an empty box`() {
         val vm = viewModel(points = ride(altitudeAt = { null }))
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithText("No altitude was recorded for this activity.")
             .performScrollTo().assertIsDisplayed()
@@ -105,7 +141,7 @@ class ActivityDetailScreenTest {
     @Test fun `delete requires confirmation`() {
         var deleted = false
         val vm = viewModel(onDelete = { deleted = true; true })
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithContentDescription("Delete activity").performClick()
 
@@ -120,14 +156,14 @@ class ActivityDetailScreenTest {
     @Test fun `dismissing the delete confirmation keeps the activity`() {
         var deleted = false
         val vm = viewModel(onDelete = { deleted = true; true })
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithContentDescription("Delete activity").performClick()
         composeRule.onNodeWithText("Keep").performClick()
         composeRule.waitForIdle()
 
         assertFalse(deleted)
-        composeRule.onNodeWithText("Per-kilometre splits").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Splits").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun `a deleted activity leaves the screen`() {
@@ -135,7 +171,7 @@ class ActivityDetailScreenTest {
         var wentBack = false
         val vm = viewModel(rows = rows, onDelete = { rows.value = null; true })
         composeRule.setContent {
-            TrailogTheme { ActivityDetailScreen(vm, onBack = { wentBack = true }) }
+            TrailogTheme { ActivityDetailScreen(vm, onBack = { wentBack = true }, onOpenMap = {}) }
         }
 
         composeRule.onNodeWithContentDescription("Delete activity").performClick()
@@ -150,7 +186,7 @@ class ActivityDetailScreenTest {
     @Test fun `name, notes and type are editable and the edit is saved`() {
         val saved = mutableListOf<Triple<String, String?, ActivityType>>()
         val vm = viewModel(onSave = { name, notes, type -> saved += Triple(name, notes, type) })
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithContentDescription("Edit activity").performClick()
         composeRule.onNodeWithText("Edit activity").assertIsDisplayed()
@@ -172,13 +208,26 @@ class ActivityDetailScreenTest {
     @Test fun `cancelling an edit saves nothing`() {
         val saved = mutableListOf<Triple<String, String?, ActivityType>>()
         val vm = viewModel(onSave = { name, notes, type -> saved += Triple(name, notes, type) })
-        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}) } }
+        composeRule.setContent { TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = {}) } }
 
         composeRule.onNodeWithContentDescription("Edit activity").performClick()
         composeRule.onNodeWithText("Cancel").performClick()
         composeRule.waitForIdle()
 
         assertTrue(saved.isEmpty())
+    }
+
+    @Test fun `tapping the map asks for the fullscreen one`() {
+        var opened = false
+        val vm = viewModel()
+        composeRule.setContent {
+            TrailogTheme { ActivityDetailScreen(vm, onBack = {}, onOpenMap = { opened = true }) }
+        }
+
+        composeRule.onNodeWithContentDescription("Map of the recorded route").performClick()
+        composeRule.waitForIdle()
+
+        assertTrue("the embedded map is a preview; tapping it opens the real one", opened)
     }
 
     // ---- navigation --------------------------------------------------------------------------
@@ -198,14 +247,18 @@ class ActivityDetailScreenTest {
                         route = "activity/{activityId}",
                         arguments = listOf(navArgument("activityId") { type = NavType.StringType }),
                     ) {
-                        ActivityDetailScreen(vm, onBack = { navController.popBackStack() })
+                        ActivityDetailScreen(
+                            vm,
+                            onBack = { navController.popBackStack() },
+                            onOpenMap = {},
+                        )
                     }
                 }
             }
         }
 
         composeRule.onNodeWithText("Open activity").performClick()
-        composeRule.onNodeWithText("Per-kilometre splits").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Splits").performScrollTo().assertIsDisplayed()
 
         composeRule.onNodeWithContentDescription("Back").performClick()
         composeRule.onNodeWithText("Open activity").assertIsDisplayed()
