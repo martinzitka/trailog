@@ -81,6 +81,16 @@
     <string name="record_stop_confirm_confirm">Stop &amp; save</string>
     <string name="record_stop_confirm_dismiss">Keep recording</string>
 
+    <!-- Record screen — naming the ride just saved (M1.8). The activity is already saved by the
+         time this appears; both fields are optional and skipping keeps the ride. -->
+    <string name="record_name_title">Name this ride?</string>
+    <string name="record_name_body">Saved. Add a name while you still remember where you
+        went — or skip, and Trailog will list it by type and date.</string>
+    <string name="record_name_name">Name</string>
+    <string name="record_name_notes">Notes</string>
+    <string name="record_name_save">Save</string>
+    <string name="record_name_skip">Skip</string>
+
     <!-- Record screen — interrupted-session recovery. -->
     <string name="record_interrupted_title">Interrupted activity found</string>
     <!-- %1$s is a coarse gap length, e.g. "42m" or "2h 10m". -->
