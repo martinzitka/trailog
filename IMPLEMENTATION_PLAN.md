@@ -99,7 +99,13 @@ Pure Kotlin, developed test-first against fixture tracks.
   segments — not distance, not elevation, not speed, not chart geometry.
 - EGM2008 geoid correction for GPS altitude.
 - Barometric elevation fusion: barometer for relative change, GPS/DEM for absolute anchor.
-- GPX and FIT reading and writing.
+- GPX reading and writing.
+- FIT **reading** — still required, but for M2 rather than M1: the Sports Tracker export
+  path prefers FIT because it carries heart rate and cadence natively where GPX needs
+  extensions, and there is to be exactly one FIT parser in the project.
+- FIT **writing is optional** (2026-08-30). Nothing in M1 needs it; GPX covers portability,
+  and CLAUDE.md's data-portability principle is satisfied without it. Do not let its absence
+  block M1. Revisit if a target tool refuses GPX.
 
 **Acceptance criteria**
 - [ ] Fixture tracks in `core/src/test/resources/fixtures/`, including at least one real
@@ -112,7 +118,8 @@ Pure Kotlin, developed test-first against fixture tracks.
 - [ ] A fixture with a deliberate multi-segment gap proves no statistic interpolates
       across the boundary. Construct it by hand if no real one exists yet.
 - [ ] Round-trip test: GPX in, GPX out, no data loss — including segment structure, which
-      must survive as multiple `<trkseg>` elements. Same for FIT.
+      must survive as multiple `<trkseg>` elements. The same for FIT *if* FIT writing is
+      built; FIT reading is covered by a parse test against a real file instead.
 
 ### M1.3 Recording engine
 
@@ -214,7 +221,7 @@ States: loading, loaded, map tiles unavailable offline.
       lines joining the ends.
 - [ ] Name, notes and activity type are editable and changes persist.
 - [ ] Delete requires confirmation.
-- [ ] GPX and FIT export available from this screen.
+- [ ] GPX export available from this screen. FIT export optional — see M1.2.
 - [ ] Degrades gracefully with no network and no cached tiles — the route still renders
       over a blank background rather than showing an error.
 
@@ -256,11 +263,35 @@ coordinate does not identify a moment.
   include it in offline packs.
 
 ### M1.7 Export
-- GPX and FIT export, single activity and all activities.
+- GPX export, single activity and all activities.
 - Works entirely offline with no account.
+- **FIT export is optional** (2026-08-30). GPX satisfies data portability; FIT writing is a
+  nice-to-have that must not hold up M1. FIT *reading* is a separate matter and is still
+  wanted for M2 — see M1.2.
 
-**M1 done when:** the developer has used the app as their only tracker for two weeks and
-hasn't lost an activity.
+### M1.8 Naming an activity when the recording is saved
+The schema already carries `name` and `notes`, and Activity detail can already edit both.
+What is missing is the moment that matters: naming the ride when you finish it, while you
+still remember where you went.
+
+- A prompt at the end of a recording, offering name and notes.
+- **Skipping it must save the activity anyway.** Naming is metadata; a ride is never held
+  hostage to it (CLAUDE.md: lose nothing).
+- Both fields stay optional forever. History already derives a display title from type and
+  date when the name is blank, and no formatted string is stored (ADR 0014).
+- No migration: `activities.name` and `activities.notes` exist, and `updateMetadata` already
+  writes them with an `updatedAt` bump for the sync tie-breaker.
+
+**Filtering on it later** needs nothing now. Activity counts are in the hundreds, so a `LIKE`
+scan over `name` and `notes` is adequate and an index would not help a leading-wildcard search
+anyway. If full-text search is ever wanted, FTS5 is a later migration — do not build it now.
+
+**M1 done when:** no activity has been lost across the recordings actually made.
+
+> Originally "used as the only tracker for two weeks". Relaxed 2026-08-30 — the developer does
+> not intend to ride exclusively with it, so a wall-clock exclusivity window would only ever
+> block the milestone rather than inform it. The thing that criterion was really protecting —
+> that nothing goes missing — is kept, and it is the part device testing cannot fake.
 
 ---
 
@@ -275,8 +306,20 @@ Lives in `tools/sports-tracker-export/`, clearly marked disposable.
   activity editing page.
 - Community scripts use an undocumented endpoint of the form
   `api.sports-tracker.com/apiserver/v1/workout/exportGpx/<id>?token=<token>`, with the
-  session token read from the `sessionkey` cookie. A FIT variant exists.
-- **Prefer FIT** — it carries heart rate and cadence natively, where GPX needs extensions.
+  session token read from the `sessionkey` cookie.
+- **An `exportFit` variant of the same endpoint is reported by several independent community
+  sources**, switched by swapping that one path segment. It is not offered as a button in the
+  web UI, which is why it is easy to conclude only GPX exists — the UI and the API differ here.
+- **Unverified against our own account** (checked 2026-08-30 from public sources only). Some of
+  those scripts date from 2016 and the host has already changed once, from `www.` to `api.`.
+- **FIT would be preferable if it works** — it carries heart rate and cadence natively where GPX
+  needs extensions. That is a property of the formats, not a claim any of those sources made.
+  But it is only worth anything if the historical workouts actually contain that data.
+- **Settle this with one request before committing to a FIT parser.** Export a single old
+  workout both ways and compare. A FIT decoder is either a hand-rolled binary parser or a new
+  `:core` dependency, which CLAUDE.md says requires asking first — too much to build on an
+  assumption about a third-party endpoint. If FIT does not work, or the old rides carry no
+  sensor data worth keeping, GPX alone is enough and FIT can leave the plan entirely.
 - Expect breakage without notice. Not a maintained feature.
 
 ### M2.2 Import CLI (`:tools:importer`)
