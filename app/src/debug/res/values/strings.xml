@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only resource overrides.
+
+  The debug build carries applicationIdSuffix ".debug" so it can sit alongside the real
+  recording app (CLAUDE.md). Without a different label the two are indistinguishable on the
+  launcher and in Settings, which is one mistaken tap away from recording a real ride into a
+  build an agent threw at the phone half an hour ago.
+
+  A source-set override rather than a resValue in build.gradle.kts: resValue would collide with
+  the app_name already in main, and the string stays a string resource either way.
+-->
+<resources>
+    <string name="app_name">Trailog debug</string>
+</resources>
