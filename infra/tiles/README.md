@@ -8,7 +8,10 @@ There are two scripts, with very different outputs:
 | Script | Produces | Size | Committed? |
 |---|---|---|---|
 | `build-tiles.sh` | `czechia-buffered.pmtiles` | hundreds of MB | **No** — reproducible from the script |
-| `fetch-style-assets.sh` | style, glyphs, sprites in `app/src/main/assets/map/` | 2.3 MB | **Yes** — small, and the app needs them at all times |
+| `fetch-style-assets.sh` | glyphs and sprites in `app/src/main/assets/map/` | 2.3 MB | **Yes** — small, and the app needs them at all times |
+
+The style itself, `app/src/main/assets/map/style.json`, is neither: it is **vendored** — forked
+from OSM Bright and maintained by hand. See "The style is vendored" below before editing it.
 
 ## What `build-tiles.sh` produces
 
@@ -120,20 +123,79 @@ route over a blank background rather than an error.
 ```
 
 Runs anywhere with bash, curl and Python — no WSL needed. Takes seconds. Its output is
-committed, so you only re-run it to change or update the style.
+committed, so you only re-run it to update the glyphs or sprites.
 
-The base style is **OSM Bright**, chosen because a muted basemap keeps the route line
-legible. Swapping it is a one-line change to `STYLE_URL` plus a re-run — the style is an
-asset, not code, and any OpenMapTiles-schema style works against the same tiles.
+### The style is vendored
 
-> **The stock style is a privacy violation as shipped.** Upstream OSM Bright points `glyphs`
-> and `sources` at `api.maptiler.com` (with an API key placeholder) and `sprite` at
+`app/src/main/assets/map/style.json` is **ours** — "Trailog Outdoor", forked from OSM Bright.
+It is a committed artifact, not a generated one. Nothing regenerates it, and the script no
+longer downloads it: doing so would silently destroy the fork.
+
+This is a change from how it used to work, and it changes the update story. To re-fork against
+a newer upstream Bright:
+
+```bash
+./infra/tiles/fetch-style-assets.sh --upstream   # writes work/osm-bright-upstream.json
+```
+
+then diff and port by hand. The fork is design, not a mechanical rewrite, so there is no script
+that can redo it.
+
+### What the fork changes
+
+Bright is a general-purpose basemap. These are the edits that make it an outdoor one, all of
+them reading data our archive already contains:
+
+| Change | Why |
+|---|---|
+| `track` split out of `highway-minor` | A forest track rendered as a white residential street. Now tan, with its own casing — including on bridges, which is easy to miss and makes a track change identity at every stream |
+| Unpaved tracks dashed | `surface`, which Planetiler collapses to exactly `paved`/`unpaved` |
+| Paths split by `subclass` | Cycleway, footway and path were one undifferentiated dash |
+| `mtb_scale` underlay | Technical trails read as thicker without losing the dash that says what they are |
+| `mountain_peak` added | Bright omits the layer entirely; the sprite already had `mountain_11` |
+| `park` added | Protected areas and nature reserves, likewise omitted |
+| Woodland opacity 0.1 → 0.16 | Near-invisible against the `#f8f4f0` background |
+
+Trails are distinguished by **dash pattern rather than by hue**. The route line is
+`MaterialTheme.colorScheme.primary`, which under dynamic colour can be any hue at all, so a
+basemap encoding meaning in saturated colour would collide with it unpredictably.
+
+**Paths and tracks only exist from z14.** `planetiler-openmaptiles` puts `CLASS_PATH` and
+`CLASS_TRACK` at zoom 14 — 13 only with `--transportation_z13_paths`, which `build-tiles.sh`
+does not pass. Styling them lower renders nothing. Worth adding to the next rebuild if trails
+at z13 turn out to matter.
+
+Two known gaps, neither worth a rebuild on its own:
+
+- A track inside a **tunnel** still renders as a service road (`tunnel-service-track`). Rare
+  enough to leave; Bright's brunnel layers are structured separately and splitting them out
+  costs two more layers for something you may never ride through.
+- `trailog-peak` labels elevation as `"{height} m"`, hardcoding metric in an asset rather than
+  going through `Formatter`. It is evaluated at render time so nothing formatted is stored, but
+  the imperial preference will need a runtime layout-property change. Layers with this problem
+  are listed in the style's `metadata` under `trailog:unitLabelledLayers`, and ADR 0017 records
+  the same gap for contour labels.
+
+### The script validates rather than generates
+
+> **A stock OpenMapTiles style is a privacy violation as shipped.** Upstream OSM Bright points
+> `glyphs` and `sources` at `api.maptiler.com` (with an API key placeholder) and `sprite` at
 > `openmaptiles.github.io` — three third-party hosts contacted at render time, one of them on
 > every label draw. CLAUDE.md forbids externally hosted fonts outright.
 >
-> The script rewrites all three to `asset://` URLs and then **asserts that no `http` URL
-> survives anywhere in the style**, failing the build if one does. Fetching from those hosts
-> at *build* time is fine; the rule is about what the app does at *run* time.
+> Ours rewrites all three to `asset://` URLs, and the script **asserts that no `http` URL
+> survives anywhere in the style**, failing if one does. Fetching from those hosts at *build*
+> time is fine; the rule is about what the app does at *run* time.
+
+It also checks that every `source-layer` is one the OpenMapTiles schema actually produces, that
+every literal icon is in the sprite sheet, that layer ids are unique, and that the layer groups
+declared in `metadata` all exist. A layer naming data the archive lacks, or an icon the sprite
+lacks, renders as nothing and reports nothing — the failure would otherwise be found on a
+hillside.
+
+`BundledStyleTest` asserts the same invariants from `:app`. The overlap is deliberate: this
+script only runs when someone re-fetches assets, whereas the test runs on every push and pull
+request, and it is the one that gates CI.
 
 The vector source's tile URL is deliberately left as a `__TRAILOG_TILE_URL__` placeholder.
 The archive lives either in app storage or on the user's own server, and the path is only
