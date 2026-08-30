@@ -3,6 +3,7 @@ package io.github.martinzitka.trailog.ui.map
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,33 +30,32 @@ class MapTilesTest {
     private fun writeArchive(name: String, sizeBytes: Int): File =
         File(tilesDir(), name).apply { writeBytes(ByteArray(sizeBytes)) }
 
-    // --- Archive discovery -----------------------------------------------------------------
+    // --- The tiles directory and the header ------------------------------------------------
 
-    @Test fun `no archive is a normal state, not a failure`() {
-        assertNull(MapTiles.findArchive(context))
+    @Test fun `owns the tiles directory, creating it if absent`() {
+        // Owning it is what makes the documented adb push work: a directory created by `adb shell
+        // mkdir` belongs to the shell user, and the app then cannot list it at all.
+        val dir = MapTiles.tilesDir(context)
+
+        assertTrue(dir.isDirectory)
+        assertTrue(dir.canRead())
+        assertEquals("tiles", dir.name)
     }
 
-    @Test fun `finds an installed archive`() {
-        val archive = writeArchive("czechia-buffered.pmtiles", 16)
+    /** A valid v3 header over an ordinary Central European extent. */
+    private fun header() = pmtilesHeader(12.0, 48.0, 19.0, 51.0)
 
-        assertEquals(archive.absolutePath, MapTiles.findArchive(context)?.absolutePath)
+    @Test fun `recognises a real pmtiles header`() {
+        assertTrue(MapTiles.isArchiveHeader(header()))
     }
 
-    @Test fun `ignores files that are not pmtiles archives`() {
-        // A partial download or an adb push of the wrong file must not be loaded as tiles.
-        writeArchive("czechia.pmtiles.partial", 32)
-        writeArchive("notes.txt", 32)
-
-        assertNull(MapTiles.findArchive(context))
-    }
-
-    @Test fun `prefers the largest archive when several are installed`() {
-        // Region packs will accumulate; the biggest is the best proxy for widest coverage until
-        // a source picker exists to make it the user's choice.
-        writeArchive("small-region.pmtiles", 16)
-        val big = writeArchive("czechia-buffered.pmtiles", 512)
-
-        assertEquals(big.absolutePath, MapTiles.findArchive(context)?.absolutePath)
+    @Test fun `rejects bytes that do not open a pmtiles v3 archive`() {
+        // What an import checks before copying a gigabyte of the wrong file.
+        assertFalse(MapTiles.isArchiveHeader(ByteArray(MapTiles.HEADER_SIZE)))
+        assertFalse(MapTiles.isArchiveHeader(ByteArray(8)))
+        assertFalse(
+            MapTiles.isArchiveHeader(header().also { it[7] = 2 }),
+        )
     }
 
     // --- Tile URL --------------------------------------------------------------------------

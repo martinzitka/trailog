@@ -32,24 +32,8 @@ class SettingsViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    /** A trivial fake: the same contract, backed by a value instead of a file. */
-    private class FakeSettings(initial: AppPreferences = AppPreferences()) : AppSettings {
-        private val state = MutableStateFlow(initial)
-        override val preferences: StateFlow<AppPreferences> = state.asStateFlow()
-        override fun setUnitSystem(units: UnitSystem) = state.update { it.copy(unitSystem = units) }
-        override fun setThemeMode(mode: ThemeMode) = state.update { it.copy(themeMode = mode) }
-        override fun setDynamicColour(enabled: Boolean) =
-            state.update { it.copy(dynamicColour = enabled) }
-
-        override fun setKeepScreenOnWhileRecording(enabled: Boolean) =
-            state.update { it.copy(keepScreenOnWhileRecording = enabled) }
-
-        override fun setShowTrails(enabled: Boolean) =
-            state.update { it.copy(showTrails = enabled) }
-    }
-
     private fun viewModel(
-        settings: AppSettings = FakeSettings(),
+        settings: AppSettings = FakeAppSettings(),
         dynamicColourSupported: Boolean = true,
     ) = SettingsViewModel(settings, dynamicColourSupported)
 
@@ -71,14 +55,14 @@ class SettingsViewModelTest {
     }
 
     @Test fun `the initial state is available synchronously, so the screen never renders blank`() {
-        val settings = FakeSettings(AppPreferences(unitSystem = UnitSystem.IMPERIAL))
+        val settings = FakeAppSettings(AppPreferences(unitSystem = UnitSystem.IMPERIAL))
         assertEquals(UnitSystem.IMPERIAL, viewModel(settings).uiState.value.unitSystem)
     }
 
     // ---- writes reach storage and come back out ----
 
     @Test fun `choosing imperial is stored and reflected`() = runTest(dispatcher) {
-        val settings = FakeSettings()
+        val settings = FakeAppSettings()
         val vm = viewModel(settings)
         vm.uiState.test {
             assertEquals(UnitSystem.METRIC, awaitItem().unitSystem)
@@ -93,7 +77,7 @@ class SettingsViewModelTest {
     }
 
     @Test fun `each setting is written independently of the others`() = runTest(dispatcher) {
-        val settings = FakeSettings()
+        val settings = FakeAppSettings()
         val vm = viewModel(settings)
 
         vm.setThemeMode(ThemeMode.DARK)
@@ -115,7 +99,7 @@ class SettingsViewModelTest {
     }
 
     @Test fun `hiding trails is stored and reflected, and reversible`() = runTest(dispatcher) {
-        val settings = FakeSettings()
+        val settings = FakeAppSettings()
         val vm = viewModel(settings)
         vm.uiState.test {
             assertTrue(awaitItem().showTrails)
@@ -128,7 +112,7 @@ class SettingsViewModelTest {
     }
 
     @Test fun `every theme mode round-trips`() {
-        val settings = FakeSettings()
+        val settings = FakeAppSettings()
         val vm = viewModel(settings)
         ThemeMode.entries.forEach { mode ->
             vm.setThemeMode(mode)
@@ -137,7 +121,7 @@ class SettingsViewModelTest {
     }
 
     @Test fun `switching back to metric is not a one-way door`() {
-        val settings = FakeSettings()
+        val settings = FakeAppSettings()
         val vm = viewModel(settings)
         vm.setUnitSystem(UnitSystem.IMPERIAL)
         vm.setUnitSystem(UnitSystem.METRIC)
@@ -154,7 +138,7 @@ class SettingsViewModelTest {
     @Test fun `an unsupported device still reports the stored preference untouched`() {
         // The stored value is not rewritten just because this device cannot honour it — moving the
         // same profile to a newer phone must keep the user's choice.
-        val settings = FakeSettings(AppPreferences(dynamicColour = true))
+        val settings = FakeAppSettings(AppPreferences(dynamicColour = true))
         val state = viewModel(settings, dynamicColourSupported = false).uiState.value
         assertTrue(state.dynamicColour)
         assertFalse(state.dynamicColourSupported)

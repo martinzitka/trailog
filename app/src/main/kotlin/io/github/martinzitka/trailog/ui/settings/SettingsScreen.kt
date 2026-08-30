@@ -16,6 +16,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -53,6 +54,9 @@ import io.github.martinzitka.trailog.ui.format.UnitSystem
  * There is no save button. Every change applies immediately and app-wide — the theme repaints and
  * every figure re-renders while this screen is still open.
  *
+ * Two rows here are actions rather than settings: Map data, which opens the region packs screen,
+ * and the export below.
+ *
  * The Data group is the exception to all of that: it holds an action, not a setting. "Export all
  * activities" lives here because this is where the rest of the data rights will land — full export
  * and full deletion are product features, not afterthoughts (CLAUDE.md) — and because History is
@@ -63,6 +67,7 @@ import io.github.martinzitka.trailog.ui.format.UnitSystem
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     exportViewModel: ExportViewModel,
+    onOpenMapData: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -148,6 +153,14 @@ fun SettingsScreen(
             // archive below z14, so a user who flips the switch while looking at a fitted route
             // sees nothing change and concludes the setting is broken.
             Note(stringResource(R.string.settings_show_trails_note))
+
+            ActionRow(
+                label = stringResource(R.string.map_data_entry_label),
+                body = stringResource(R.string.map_data_entry_body),
+                icon = Icons.Filled.Layers,
+                enabled = true,
+                onClick = onOpenMapData,
+            )
         }
 
         SettingsGroup(stringResource(R.string.settings_group_recording)) {
