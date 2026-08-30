@@ -288,6 +288,23 @@
         this changes nothing until you pinch in past street level. Forest tracks are roads and
         are always drawn.</string>
 
+    <!-- Settings — data. -->
+    <string name="settings_group_data">Data</string>
+    <string name="settings_export_all_label">Export all activities</string>
+    <string name="settings_export_all_body">Every ride as a GPX file, in one zip. Works offline
+        and needs no account.</string>
+    <string name="settings_export_all_note">Recording gaps stay as separate track segments, so
+        nothing is joined up by a straight line. Your recordings are not changed or removed.</string>
+    <string name="settings_export_starting">Working out what to export…</string>
+    <string name="settings_export_running">Exporting %1$d of %2$d…</string>
+    <plurals name="settings_export_done">
+        <item quantity="one">Exported %d activity.</item>
+        <item quantity="other">Exported %d activities.</item>
+    </plurals>
+    <string name="settings_export_empty">Nothing to export yet — record an activity first.</string>
+    <string name="settings_export_failed">Couldn’t write the export file. Nothing on your device
+        was changed.</string>
+
     <!-- Fullscreen map and its linked charts. -->
     <string name="map_open_fullscreen">Open the fullscreen map</string>
     <string name="map_cursor_hint">Touch the chart or the map to inspect a point of the

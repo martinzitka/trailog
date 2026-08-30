@@ -46,6 +46,16 @@ interface ActivityDao {
     suspend fun allIds(): List<String>
 
     /**
+     * Every activity as an id and a start time, most recent first — the bulk export worklist.
+     *
+     * Deliberately not [allByStartTimeDesc]: the export names each file after the ride it holds
+     * and then loads that ride's points one at a time, so it needs the order and the timestamp up
+     * front but must never hold every activity in memory at once.
+     */
+    @Query("SELECT id, startTime FROM activities ORDER BY startTime DESC")
+    suspend fun allRefsByStartTimeDesc(): List<ActivityRef>
+
+    /**
      * Ids of activities that have no cached statistics row yet — the backfill worklist. This is
      * non-empty after the 1 → 2 migration, which created `activities` rows for recordings made
      * before that table existed and left their statistics to be computed later.

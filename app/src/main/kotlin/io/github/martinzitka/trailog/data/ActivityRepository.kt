@@ -47,6 +47,13 @@ class ActivityRepository(
     fun activitiesWithStatsByRecency(): Flow<List<ActivityWithStats>> =
         activities.allWithStatsByStartTimeDesc()
 
+    /**
+     * Every activity as an id and a start time, most recent first — the bulk export worklist.
+     * A snapshot, not a flow: an export is one pass over the history as it stands when the user
+     * asks for it, not a view that keeps changing under the writer.
+     */
+    suspend fun activityRefs(): List<ActivityRef> = activities.allRefsByStartTimeDesc()
+
     /** An activity's cached stats, observed. Null until the first recompute. */
     fun statsFlow(activityId: String): Flow<ActivityStatsEntity?> = stats.byIdFlow(activityId)
 

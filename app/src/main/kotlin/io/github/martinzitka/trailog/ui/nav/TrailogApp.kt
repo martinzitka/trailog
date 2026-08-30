@@ -38,6 +38,7 @@ import io.github.martinzitka.trailog.ui.record.RecordViewModel
 import io.github.martinzitka.trailog.ui.sensors.SensorsScreen
 import io.github.martinzitka.trailog.ui.sensors.SensorsViewModel
 import io.github.martinzitka.trailog.ui.settings.PrefsAppSettings
+import io.github.martinzitka.trailog.ui.settings.ExportViewModel
 import io.github.martinzitka.trailog.ui.settings.SettingsScreen
 import io.github.martinzitka.trailog.ui.settings.SettingsViewModel
 import io.github.martinzitka.trailog.ui.settings.ThemeMode
@@ -163,7 +164,14 @@ private fun TrailogNavigation() {
                 val settingsViewModel: SettingsViewModel = viewModel(
                     factory = SettingsViewModel.Factory(context),
                 )
-                SettingsScreen(viewModel = settingsViewModel, modifier = Modifier.fillMaxSize())
+                val exportViewModel: ExportViewModel = viewModel(
+                    factory = ExportViewModel.Factory(context),
+                )
+                SettingsScreen(
+                    viewModel = settingsViewModel,
+                    exportViewModel = exportViewModel,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             composable(
                 route = Routes.ACTIVITY_DETAIL,
