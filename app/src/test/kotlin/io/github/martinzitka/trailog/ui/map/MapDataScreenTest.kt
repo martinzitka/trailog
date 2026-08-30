@@ -91,6 +91,28 @@ class MapDataScreenTest {
         composeRule.onNodeWithText("czechia.pmtiles").assertIsDisplayed()
     }
 
+    @Test fun `with another pack installed, the warning does not claim the map goes blank`() {
+        // Found on the device: that warning is a lie while another pack is still installed, and one
+        // the user can see through — they are looking at the list.
+        writeArchive("czechia.pmtiles")
+        writeArchive("austria.pmtiles")
+        composeRule.setContent { TrailogTheme { MapDataScreen(viewModel(), onBack = {}) } }
+
+        composeRule.onNodeWithContentDescription("Remove austria.pmtiles").performClick()
+
+        composeRule.onNodeWithText("keep drawing from the pack you have left", substring = true)
+            .assertIsDisplayed()
+    }
+
+    @Test fun `removing the last pack warns that the map will go blank`() {
+        writeArchive("czechia.pmtiles")
+        composeRule.setContent { TrailogTheme { MapDataScreen(viewModel(), onBack = {}) } }
+
+        composeRule.onNodeWithContentDescription("Remove czechia.pmtiles").performClick()
+
+        composeRule.onNodeWithText("blank background", substring = true).assertIsDisplayed()
+    }
+
     @Test fun `confirming the removal deletes the file`() {
         writeArchive("czechia.pmtiles")
         composeRule.setContent { TrailogTheme { MapDataScreen(viewModel(), onBack = {}) } }

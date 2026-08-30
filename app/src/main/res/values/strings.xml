@@ -332,9 +332,12 @@
         removed.</string>
     <string name="map_data_delete_cd">Remove %1$s</string>
     <string name="map_data_delete_title">Remove this region pack?</string>
-    <string name="map_data_delete_body">%1$s will be deleted from this device. Your activities are
-        untouched, but maps will draw over a blank background until you import a pack again — and
-        Trailog cannot re-download it.</string>
+    <string name="map_data_delete_body_last">%1$s will be deleted from this device. Your activities
+        are untouched, but maps will draw over a blank background until you import a pack again —
+        and Trailog cannot re-download it.</string>
+    <string name="map_data_delete_body_other">%1$s will be deleted from this device. Your activities
+        are untouched and maps will keep drawing from the pack you have left, but Trailog cannot
+        re-download this one.</string>
     <string name="map_data_delete_confirm">Remove</string>
     <string name="map_data_delete_cancel">Keep</string>
 

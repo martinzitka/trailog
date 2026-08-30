@@ -155,7 +155,19 @@ fun MapDataScreen(
             title = { Text(stringResource(R.string.map_data_delete_title)) },
             // Says how it is undone, because it is not: there is no re-download, and rebuilding a
             // country archive is a twenty-minute job on a desktop.
-            text = { Text(stringResource(R.string.map_data_delete_body, name)) },
+            //
+            // Which consequence it names depends on what is left. Warning that maps will go blank
+            // when another pack is still installed would be a lie, and one the user can see through
+            // — they are looking at the list.
+            text = {
+                Text(
+                    if (state.archives.size <= 1) {
+                        stringResource(R.string.map_data_delete_body_last, name)
+                    } else {
+                        stringResource(R.string.map_data_delete_body_other, name)
+                    },
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
