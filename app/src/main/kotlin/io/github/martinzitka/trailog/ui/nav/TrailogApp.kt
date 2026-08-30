@@ -38,6 +38,8 @@ import io.github.martinzitka.trailog.ui.record.RecordViewModel
 import io.github.martinzitka.trailog.ui.sensors.SensorsScreen
 import io.github.martinzitka.trailog.ui.sensors.SensorsViewModel
 import io.github.martinzitka.trailog.ui.settings.PrefsAppSettings
+import io.github.martinzitka.trailog.ui.map.MapDataScreen
+import io.github.martinzitka.trailog.ui.map.MapDataViewModel
 import io.github.martinzitka.trailog.ui.settings.ExportViewModel
 import io.github.martinzitka.trailog.ui.settings.SettingsScreen
 import io.github.martinzitka.trailog.ui.settings.SettingsViewModel
@@ -170,6 +172,18 @@ private fun TrailogNavigation() {
                 SettingsScreen(
                     viewModel = settingsViewModel,
                     exportViewModel = exportViewModel,
+                    onOpenMapData = { navController.navigate(Routes.MAP_DATA) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable(Routes.MAP_DATA) {
+                val context = LocalContext.current
+                val mapDataViewModel: MapDataViewModel = viewModel(
+                    factory = MapDataViewModel.Factory(context),
+                )
+                MapDataScreen(
+                    viewModel = mapDataViewModel,
+                    onBack = { navController.popBackStack() },
                     modifier = Modifier.fillMaxSize(),
                 )
             }

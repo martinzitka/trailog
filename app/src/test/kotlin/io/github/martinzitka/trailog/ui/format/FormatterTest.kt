@@ -135,4 +135,48 @@ class FormatterTest {
         assertEquals("1 mi", Formatter(UnitSystem.IMPERIAL).laps(1))
         assertEquals("5 mi", Formatter(UnitSystem.IMPERIAL).laps(5))
     }
+
+    // ---- map data ------------------------------------------------------------------------------
+
+    @Test fun `a file size is reported in the decimal units every file manager uses`() {
+        // The user is comparing this against the file they downloaded, so it must be the same
+        // number they saw there — 1.3 GB, not 1.2 GiB.
+        assertEquals("1.3 GB", metric.fileSize(1_300_000_000))
+        assertEquals("812 MB", metric.fileSize(812_000_000))
+        assertEquals("45 kB", metric.fileSize(45_000))
+        assertEquals("512 B", metric.fileSize(512))
+    }
+
+    @Test fun `a file size is not a measurement, so the unit preference does not touch it`() {
+        assertEquals(metric.fileSize(1_300_000_000), imperial.fileSize(1_300_000_000))
+    }
+
+    @Test fun `a negative size cannot be rendered as one`() {
+        assertEquals("0 B", metric.fileSize(-1))
+    }
+
+    @Test fun `coverage names the corners with hemispheres, not signs`() {
+        assertEquals(
+            "48.1°N–51.4°N, 11.9°E–19.0°E",
+            metric.coverage(
+                minLatitude = 48.1,
+                minLongitude = 11.9,
+                maxLatitude = 51.4,
+                maxLongitude = 19.0,
+            ),
+        )
+    }
+
+    @Test fun `coverage south of the equator and west of Greenwich reads correctly`() {
+        // A minus sign in front of a coordinate is easy to miss and reverses the meaning.
+        assertEquals(
+            "34.0°S–22.0°S, 18.0°W–5.0°E",
+            metric.coverage(
+                minLatitude = -34.0,
+                minLongitude = -18.0,
+                maxLatitude = -22.0,
+                maxLongitude = 5.0,
+            ),
+        )
+    }
 }

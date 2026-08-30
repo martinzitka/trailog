@@ -43,6 +43,13 @@ object Routes {
 
     const val ARG_ACTIVITY_ID = "activityId"
 
+    /**
+     * The region packs installed on the device, pushed from Settings. Its own destination rather
+     * than a section of Settings because it has an empty state, a list, a copy in progress and a
+     * confirmation dialog — more than a settings group should hold.
+     */
+    const val MAP_DATA = "settings/map-data"
+
     /** Destinations that take the whole screen, with no bottom navigation bar. */
     val fullscreen: Set<String> = setOf(ACTIVITY_MAP)
 }

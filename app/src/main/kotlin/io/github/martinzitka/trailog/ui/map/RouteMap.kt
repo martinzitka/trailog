@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.martinzitka.trailog.R
 import kotlin.math.cos
 
@@ -176,11 +177,11 @@ fun RouteMap(
     // than crashing on a cast — the model deliberately runs ahead of the implementation.
     val styleAsset = (source.style as? StyleSource.Bundled)?.assetPath
 
-    // Resolved once per composition rather than per frame: this touches the filesystem, and the
-    // archive cannot appear or vanish while a screen is open.
-    val archive = remember(source) {
-        MapTiles.findArchive(context).takeIf { source.worksOffline }
-    }
+    // Observed rather than resolved once, so importing or removing a region pack in Settings
+    // reaches every map that is already composed. The store does the filesystem work; this reads
+    // a value it already holds.
+    val installed by MapArchiveStore.get(context).active.collectAsStateWithLifecycle()
+    val archive = installed?.file?.takeIf { source.worksOffline }
 
     // Whether the camera is still under the app's control. True until a user gesture moves it,
     // for both camera modes: a re-fit is as unwelcome as a follow once someone has panned away.

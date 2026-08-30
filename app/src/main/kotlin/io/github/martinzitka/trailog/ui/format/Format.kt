@@ -6,6 +6,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import kotlin.math.abs
 
 /**
  * The single client-side formatting utility (CLAUDE.md: "Conversion and formatting happen only
@@ -168,6 +169,50 @@ class Formatter(val units: UnitSystem = UnitSystem.METRIC) {
             "trailog-$safe-$stamp.$extension"
         }
     }
+
+    /**
+     * A file size, for the region packs on the Map data screen: "1.3 GB", "812 MB", "45 kB".
+     *
+     * Decimal units, matching what Android's own storage screens and every file manager report —
+     * a user comparing the figure against the file they downloaded needs the same number, and
+     * binary units would show a 1.3 GB archive as 1.2 GiB. Gigabytes carry a decimal because the
+     * difference between 1.3 and 1.9 GB is the difference between fitting and not.
+     *
+     * Not affected by the unit preference: a byte is a byte in both systems.
+     */
+    fun fileSize(bytes: Long): String {
+        val b = bytes.coerceAtLeast(0)
+        val locale = Locale.getDefault()
+        return when {
+            b >= 1_000_000_000L -> String.format(locale, "%.1f GB", b / 1_000_000_000.0)
+            b >= 1_000_000L -> String.format(locale, "%.0f MB", b / 1_000_000.0)
+            b >= 1_000L -> String.format(locale, "%.0f kB", b / 1_000.0)
+            else -> String.format(locale, "%d B", b)
+        }
+    }
+
+    /**
+     * The area a region pack covers, as its corners: "48.1°N–51.4°N, 11.9°E–19.0°E".
+     *
+     * One decimal, because this answers "does this pack reach where I am going" and a tenth of a
+     * degree is about 11 km. Hemispheres are letters rather than signs — a minus in front of a
+     * coordinate is easy to miss and reverses the meaning.
+     *
+     * Degrees are degrees in both unit systems, so this too ignores the preference.
+     */
+    fun coverage(
+        minLatitude: Double,
+        minLongitude: Double,
+        maxLatitude: Double,
+        maxLongitude: Double,
+    ): String = "${latitude(minLatitude)}–${latitude(maxLatitude)}, " +
+        "${longitude(minLongitude)}–${longitude(maxLongitude)}"
+
+    private fun latitude(degrees: Double): String =
+        String.format(Locale.getDefault(), "%.1f°%s", abs(degrees), if (degrees < 0) "S" else "N")
+
+    private fun longitude(degrees: Double): String =
+        String.format(Locale.getDefault(), "%.1f°%s", abs(degrees), if (degrees < 0) "W" else "E")
 
     private companion object {
         // Exact definitions, not approximations: the international mile and foot are defined in

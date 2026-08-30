@@ -104,12 +104,26 @@ TRAILOG_TILES_SNAPSHOT=260822         # Geofabrik snapshot date, YYMMDD
 The archive is **not bundled in the APK** — it is far too large, and Play caps the base APK
 at 150 MB. It lives in app storage.
 
+There are two ways in, and both land in the same directory.
+
+**From the phone, through the app.** Settings › Map › Map data › *Import a region pack*. Put the
+`.pmtiles` file somewhere the file picker can reach — Downloads, an SD card, a USB stick — and pick
+it. The app copies it into its own storage and switches to it. This is the route a user takes; it
+needs no cable and no developer tools, and Trailog never fetches the file itself.
+
+**From a desktop, over adb.** Still the fastest route during development:
+
 ```bash
 adb push dist/czechia-buffered.pmtiles \
   /sdcard/Android/data/io.github.martinzitka.trailog.debug/files/tiles/
 ```
 
-Later, M1.6's offline region packs will download it from the user's own server instead.
+A pushed file is picked up with no further ceremony: with no choice stored, the app renders the
+largest archive it finds. Push it into the `.debug` package for the debug build and the
+suffix-less one for release — they are separate apps with separate storage.
+
+The app validates a PMTiles v3 header on import and refuses anything else, whereas an adb push is
+unchecked — a truncated push shows up as an archive that renders nothing.
 
 What *is* bundled in the APK is the small stuff: the style JSON, glyph (font) ranges and
 sprite sheet — a few MB total. That means the app always has a valid style even with no

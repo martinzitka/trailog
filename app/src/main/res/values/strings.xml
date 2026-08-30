@@ -305,6 +305,42 @@
     <string name="settings_export_failed">Couldn’t write the export file. Nothing on your device
         was changed.</string>
 
+    <!-- Map data: the region packs installed on the device. -->
+    <string name="map_data_title">Map data</string>
+    <string name="map_data_back">Back to settings</string>
+    <string name="map_data_entry_label">Map data</string>
+    <string name="map_data_entry_body">Region packs stored on this device, and importing a new
+        one.</string>
+    <string name="map_data_choose">Maps are drawn from one pack at a time.</string>
+    <string name="map_data_coverage_unknown">Area unknown — this pack’s header could not be
+        read.</string>
+    <string name="map_data_empty_title">No map data on this device</string>
+    <string name="map_data_empty_body">Routes still record and still draw, over a blank
+        background. Import a region pack to put a map underneath them.</string>
+    <string name="map_data_empty_note">Build one with infra/tiles/build-tiles.sh, or download the
+        .pmtiles file from your own server, then import it here. Trailog never fetches it for
+        you.</string>
+    <string name="map_data_import">Import a region pack…</string>
+    <string name="map_data_copying">Copying — %1$s of %2$s</string>
+    <string name="map_data_copying_unknown">Copying — %1$s so far</string>
+    <string name="map_data_cancel">Cancel</string>
+    <string name="map_data_dismiss">Dismiss</string>
+    <string name="map_data_not_an_archive">That file is not a PMTiles archive. Nothing was
+        copied.</string>
+    <string name="map_data_no_space">Needs %1$s but only %2$s is free. Nothing was copied.</string>
+    <string name="map_data_import_failed">The copy did not finish. The partial file was
+        removed.</string>
+    <string name="map_data_delete_cd">Remove %1$s</string>
+    <string name="map_data_delete_title">Remove this region pack?</string>
+    <string name="map_data_delete_body_last">%1$s will be deleted from this device. Your activities
+        are untouched, but maps will draw over a blank background until you import a pack again —
+        and Trailog cannot re-download it.</string>
+    <string name="map_data_delete_body_other">%1$s will be deleted from this device. Your activities
+        are untouched and maps will keep drawing from the pack you have left, but Trailog cannot
+        re-download this one.</string>
+    <string name="map_data_delete_confirm">Remove</string>
+    <string name="map_data_delete_cancel">Keep</string>
+
     <!-- Fullscreen map and its linked charts. -->
     <string name="map_open_fullscreen">Open the fullscreen map</string>
     <string name="map_cursor_hint">Touch the chart or the map to inspect a point of the
