@@ -12,12 +12,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.datetime.Instant
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -39,9 +42,13 @@ class RecordViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel(): RecordViewModel = RecordViewModel(
-        engine = FakeEngine(),
+    /** Every metadata write the ViewModel made, in order. Empty means nothing was written. */
+    private val saved = mutableListOf<SavedMetadata>()
+
+    private fun viewModel(engine: RecordingEngine = FakeEngine()): RecordViewModel = RecordViewModel(
+        engine = engine,
         loadActivity = { null },
+        saveMetadata = { id, name, notes, type -> saved += SavedMetadata(id, name, notes, type) },
         settings = FakeSettings(ActivityType.RUNNING),
         now = { Instant.fromEpochMilliseconds(0) },
         ticker = emptyFlow(),
@@ -152,15 +159,133 @@ class RecordViewModelTest {
         assertFalse(allGranted.warnings.isNotEmpty())
     }
 
+    // ---- naming the ride just saved (M1.8) ----
+
+    @Test fun `stopping raises a naming prompt for the activity that was just finalised`() {
+        val id = UUID.randomUUID()
+        val engine = FakeEngine(session(RecordingState.RECORDING, id))
+        val vm = viewModel(engine)
+
+        vm.stop()
+
+        // The ride is saved first: the prompt only ever appears over an activity already on disk.
+        assertEquals(1, engine.finalizeCalls)
+        assertEquals(NamingPrompt(id.toString(), ActivityType.CYCLING), vm.namingPrompt.value)
+    }
+
+    @Test fun `skipping the prompt closes it and writes nothing`() {
+        val engine = FakeEngine(session(RecordingState.RECORDING))
+        val vm = viewModel(engine)
+        vm.stop()
+
+        vm.skipNaming()
+
+        assertNull(vm.namingPrompt.value)
+        assertTrue(saved.isEmpty())
+        // The ride was saved regardless — skipping costs a title, never an activity.
+        assertEquals(1, engine.finalizeCalls)
+    }
+
+    @Test fun `saving a name writes it to the finished activity and closes the prompt`() = runTest(dispatcher) {
+        val id = UUID.randomUUID()
+        val vm = viewModel(FakeEngine(session(RecordingState.RECORDING, id)))
+        vm.stop()
+
+        vm.saveName("Bílá skála loop", "Wet roots after the rain")
+        advanceUntilIdle()
+
+        assertNull(vm.namingPrompt.value)
+        assertEquals(
+            listOf(SavedMetadata(id.toString(), "Bílá skála loop", "Wet roots after the rain", ActivityType.CYCLING)),
+            saved,
+        )
+    }
+
+    @Test fun `saving trims whitespace and keeps notes-only naming`() = runTest(dispatcher) {
+        val id = UUID.randomUUID()
+        val vm = viewModel(FakeEngine(session(RecordingState.RECORDING, id)))
+        vm.stop()
+
+        vm.saveName("   ", "  felt slow  ")
+        advanceUntilIdle()
+
+        assertEquals(listOf(SavedMetadata(id.toString(), "", "felt slow", ActivityType.CYCLING)), saved)
+    }
+
+    @Test fun `saving with both fields empty writes nothing`() = runTest(dispatcher) {
+        val vm = viewModel(FakeEngine(session(RecordingState.RECORDING)))
+        vm.stop()
+
+        vm.saveName("  ", "   ")
+        advanceUntilIdle()
+
+        // Nothing to record, so the row keeps its original updatedAt rather than being touched.
+        assertNull(vm.namingPrompt.value)
+        assertTrue(saved.isEmpty())
+    }
+
+    @Test fun `finishing an interrupted session also offers naming`() {
+        val id = UUID.randomUUID()
+        val engine = FakeEngine(session(RecordingState.RECOVERING, id))
+        val vm = viewModel(engine)
+
+        vm.recoverFinish()
+
+        assertEquals(1, engine.finalizeCalls)
+        assertEquals(NamingPrompt(id.toString(), ActivityType.CYCLING), vm.namingPrompt.value)
+    }
+
+    @Test fun `resuming an interrupted session raises no prompt`() {
+        val vm = viewModel(FakeEngine(session(RecordingState.RECOVERING)))
+
+        vm.recoverResume()
+
+        assertNull(vm.namingPrompt.value)
+    }
+
+    @Test fun `saving with no prompt open is a no-op`() = runTest(dispatcher) {
+        val vm = viewModel()
+
+        vm.saveName("orphan", "orphan")
+        advanceUntilIdle()
+
+        assertTrue(saved.isEmpty())
+    }
+
     // ---- fakes ----
 
-    private class FakeEngine : RecordingEngine {
-        override val session: StateFlow<RecordingSession?> = MutableStateFlow(null)
+    /** A metadata write the ViewModel asked for. */
+    private data class SavedMetadata(
+        val activityId: String,
+        val name: String,
+        val notes: String?,
+        val type: ActivityType,
+    )
+
+    /**
+     * Enough of the engine to finish a recording: the session is mutable, `requestStop` moves it
+     * to STOPPING and `finalize` clears it, exactly as [AndroidRecordingEngine] does. That
+     * sequence is what the naming prompt has to survive — it is raised *after* the session is
+     * already gone.
+     */
+    private class FakeEngine(initial: RecordingSession? = null) : RecordingEngine {
+        private val _session = MutableStateFlow(initial)
+        override val session: StateFlow<RecordingSession?> = _session
+        var finalizeCalls = 0
+            private set
+
         override fun start(type: ActivityType) = Unit
         override fun pause() = Unit
         override fun resume() = Unit
-        override fun requestStop() = Unit
-        override fun finalize() = Unit
+        override fun requestStop() {
+            _session.value = _session.value?.copy(state = RecordingState.STOPPING)
+        }
+
+        override fun finalize() {
+            finalizeCalls++
+            _session.value = null
+        }
+
         override fun recoverResume() = Unit
         override fun record(point: RawPoint) = Unit
         override fun recoverInterruptedSession() = null

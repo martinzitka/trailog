@@ -104,3 +104,22 @@ sealed interface RecordUiState {
         override val environment: RecordEnvironment,
     ) : RecordUiState
 }
+
+/**
+ * The "name this ride" prompt raised once a recording has been finalised (M1.8). It is deliberately
+ * *not* a [RecordUiState] case: the activity is already saved by the time this appears, so the
+ * screen underneath is whatever it would otherwise be — usually [RecordUiState.Ready], ready for
+ * the next ride. Naming is metadata laid on top of a ride that is already safe.
+ *
+ * Carries the type so the prompt can write metadata without re-reading the activity;
+ * `ActivityRepository.updateMetadata` takes all three fields together and the type must round-trip
+ * unchanged.
+ *
+ * No name is pre-filled. History derives a display title from the type and date when the name is
+ * blank, and storing that derived string would put a formatted value in the database (ADR 0014).
+ * The type label is offered as placeholder text instead — a hint, never a value.
+ */
+data class NamingPrompt(
+    val activityId: String,
+    val activityType: ActivityType,
+)

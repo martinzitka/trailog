@@ -31,6 +31,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -79,6 +80,7 @@ fun RecordScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val state by viewModel.uiState.collectAsState()
+    val namingPrompt by viewModel.namingPrompt.collectAsState()
 
     // Opt-in only, and only while actually recording (ADR 0011: recording never depends on the
     // screen — the service does the work, so the default is to let the phone sleep and save the
@@ -188,6 +190,16 @@ fun RecordScreen(
                 viewModel.stop()
             },
             onDismiss = { showStopConfirm = false },
+        )
+    }
+
+    // The ride is already on disk by the time this appears — the dialog only ever adds metadata,
+    // so every way out of it (Skip, a tap outside, back, the process dying) keeps the activity.
+    namingPrompt?.let { prompt ->
+        NameActivityDialog(
+            activityType = prompt.activityType,
+            onSave = viewModel::saveName,
+            onSkip = viewModel::skipNaming,
         )
     }
 }
@@ -507,6 +519,67 @@ private fun WarningCard(
             }
         }
     }
+}
+
+/**
+ * "Name this ride?" — raised once a recording has been finalised (M1.8).
+ *
+ * The name field starts *empty* rather than pre-filled with the derived title: History already
+ * falls back to the type and date for an unnamed activity, and writing that derived string into
+ * the row would store a formatted value (ADR 0014). The type label is a placeholder — a hint,
+ * never a value, and Material 3 only reveals it once the field has focus, which is why the body
+ * text says in prose what an unnamed ride will be listed as.
+ *
+ * Dismissing by tapping outside is routed to [onSkip] and not to a separate "cancel" path,
+ * because there is nothing to cancel — skipping is the same thing.
+ */
+@Composable
+private fun NameActivityDialog(
+    activityType: ActivityType,
+    onSave: (String, String?) -> Unit,
+    onSkip: () -> Unit,
+) {
+    // rememberSaveable so a rotation mid-typing does not discard what was typed; the prompt
+    // itself survives in the ViewModel.
+    var name by rememberSaveable { mutableStateOf("") }
+    var notes by rememberSaveable { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onSkip,
+        title = { Text(stringResource(R.string.record_name_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    stringResource(R.string.record_name_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.record_name_name)) },
+                    placeholder = { Text(activityType.label()) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text(stringResource(R.string.record_name_notes)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name, notes.ifBlank { null }) }) {
+                Text(stringResource(R.string.record_name_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onSkip) {
+                Text(stringResource(R.string.record_name_skip))
+            }
+        },
+    )
 }
 
 @Composable
