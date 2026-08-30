@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onStart
@@ -42,6 +43,7 @@ import kotlin.time.DurationUnit
 class RecordViewModel(
     private val engine: RecordingEngine,
     private val loadActivity: suspend (String) -> Activity?,
+    private val saveMetadata: suspend (String, String, String?, ActivityType) -> Unit,
     private val settings: RecordSettings,
     private val now: () -> Instant = { Clock.System.now() },
     ticker: Flow<Unit> = secondTicker(),
@@ -50,6 +52,7 @@ class RecordViewModel(
     private val environment = MutableStateFlow(RecordEnvironment())
     private val selectedType = MutableStateFlow(settings.lastActivityType())
     private val livePayload = MutableStateFlow<LivePayload?>(null)
+    private val _namingPrompt = MutableStateFlow<NamingPrompt?>(null)
 
     init {
         // Refresh live stats on every session change and every tick, cancelling an in-flight
@@ -74,6 +77,15 @@ class RecordViewModel(
             ),
         )
 
+    /**
+     * The just-finished activity waiting to be named, or null when there is nothing to name
+     * (M1.8). Held separately from [uiState] because it outlives the recording: by the time it is
+     * non-null the session is gone and [uiState] has already fallen back to
+     * [RecordUiState.Ready]. Living in the ViewModel also means a rotation mid-typing does not
+     * lose the prompt.
+     */
+    val namingPrompt: StateFlow<NamingPrompt?> = _namingPrompt.asStateFlow()
+
     // ---- intent ---------------------------------------------------------------------------
 
     /** Push the latest permission / battery-optimisation state, read by the screen from the OS. */
@@ -95,17 +107,59 @@ class RecordViewModel(
     fun pause() = engine.pause()
     fun resume() = engine.resume()
 
-    /** Confirmed stop: finalise and save the activity. */
+    /** Confirmed stop: finalise and save the activity, then offer to name it. */
     fun stop() {
+        val finished = engine.session.value
         engine.requestStop()
         engine.finalize()
+        finished?.let { raiseNamingPrompt(it) }
     }
 
     /** Resume an interrupted session into a new segment. */
     fun recoverResume() = engine.recoverResume()
 
-    /** Finish an interrupted session without resuming, saving what was recorded. */
-    fun recoverFinish() = engine.finalize()
+    /**
+     * Finish an interrupted session without resuming, saving what was recorded. Also the end of a
+     * recording, so it offers naming on the same terms — the ride may be hours old by now, but the
+     * prompt costs a dismissal and the alternative is the ride quietly landing in History unnamed.
+     */
+    fun recoverFinish() {
+        val finished = engine.session.value
+        engine.finalize()
+        finished?.let { raiseNamingPrompt(it) }
+    }
+
+    /**
+     * Write the name and notes onto the activity that just finished, and close the prompt.
+     *
+     * The activity was saved before the prompt ever appeared, so nothing here can cost a ride —
+     * a failed metadata write loses a title, and the user can set one from Activity detail at any
+     * time. Both fields stay optional: with nothing typed this writes nothing at all rather than
+     * stamping a pointless `updatedAt` on the row.
+     */
+    fun saveName(name: String, notes: String?) {
+        val prompt = _namingPrompt.value ?: return
+        _namingPrompt.value = null
+        val trimmedName = name.trim()
+        val trimmedNotes = notes?.trim()?.takeIf { it.isNotEmpty() }
+        if (trimmedName.isEmpty() && trimmedNotes == null) return
+        viewModelScope.launch {
+            saveMetadata(prompt.activityId, trimmedName, trimmedNotes, prompt.activityType)
+        }
+    }
+
+    /**
+     * Dismiss the prompt without naming. The ride keeps the title History derives from its type
+     * and date, and remains editable from Activity detail forever (CLAUDE.md: a ride is never
+     * held hostage to its metadata).
+     */
+    fun skipNaming() {
+        _namingPrompt.value = null
+    }
+
+    private fun raiseNamingPrompt(session: RecordingSession) {
+        _namingPrompt.value = NamingPrompt(session.activityId.toString(), session.type)
+    }
 
     // ---- derivation -----------------------------------------------------------------------
 
@@ -201,6 +255,7 @@ class RecordViewModel(
             return RecordViewModel(
                 engine = AndroidRecordingEngine.get(appContext),
                 loadActivity = repository::loadActivity,
+                saveMetadata = repository::updateMetadata,
                 settings = PrefsRecordSettings(appContext),
             ) as T
         }
