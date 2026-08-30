@@ -21,11 +21,13 @@ import androidx.navigation.compose.rememberNavController
 import io.github.martinzitka.trailog.ui.format.Formatter
 import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.format.UnitSystem
+import io.github.martinzitka.trailog.ui.map.LocalShowTrails
 import io.github.martinzitka.trailog.ui.theme.TrailogTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -58,6 +60,9 @@ class SettingsScreenTest {
 
         override fun setKeepScreenOnWhileRecording(enabled: Boolean) =
             state.update { it.copy(keepScreenOnWhileRecording = enabled) }
+
+        override fun setShowTrails(enabled: Boolean) =
+            state.update { it.copy(showTrails = enabled) }
     }
 
     private fun viewModel(
@@ -78,7 +83,17 @@ class SettingsScreenTest {
         composeRule.onNodeWithText("System").performScrollTo().assertIsSelected()
         composeRule.onNodeWithText("Material You colours").performScrollTo().assertIsOn()
 
+        composeRule.onNodeWithText("Show paths and trails").performScrollTo().assertIsOn()
+
         composeRule.onNodeWithText("Keep screen on while recording").performScrollTo().assertIsOff()
+    }
+
+    @Test fun `the trail toggle warns that it only shows above zoom 14`() {
+        // Without this the setting reads as broken: every map opens fitted to a whole route, well
+        // below the zoom at which the archive has any path data to draw.
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel()) } }
+        composeRule.onNodeWithText("zoom 14", substring = true)
+            .performScrollTo().assertIsDisplayed()
     }
 
     @Test fun `the units explanation says recordings are unaffected`() {
@@ -146,6 +161,34 @@ class SettingsScreenTest {
 
         composeRule.onNodeWithText("7.67 mi").assertIsDisplayed()
         composeRule.onNodeWithText("12.35 km").assertDoesNotExist()
+    }
+
+    @Test fun `hiding trails immediately reaches every map in the tree`() {
+        val settings = FakeSettings()
+        composeRule.setContent {
+            // Mirrors the real root, where trail visibility is provided once for the whole tree
+            // and every RouteMap reads it ambiently. Standing in for a map here because MapLibre
+            // never renders under Robolectric — what is being tested is that the preference
+            // reaches a reader, not what the renderer then does with it.
+            val prefs by settings.preferences.collectAsStateWithLifecycle()
+            CompositionLocalProvider(LocalShowTrails provides prefs.showTrails) {
+                TrailogTheme {
+                    Text(if (LocalShowTrails.current) "trails drawn" else "trails hidden")
+                    SettingsScreen(viewModel(settings))
+                }
+            }
+        }
+
+        composeRule.onNodeWithText("trails drawn").assertIsDisplayed()
+
+        composeRule.onNodeWithText("Show paths and trails").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("trails hidden").assertIsDisplayed()
+        assertFalse(
+            "the write must reach storage, not just the ambient value",
+            settings.preferences.value.showTrails,
+        )
     }
 
     // ---- navigation ----

@@ -32,6 +32,7 @@ import io.github.martinzitka.trailog.ui.format.Formatter
 import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.history.HistoryScreen
 import io.github.martinzitka.trailog.ui.history.HistoryViewModel
+import io.github.martinzitka.trailog.ui.map.LocalShowTrails
 import io.github.martinzitka.trailog.ui.record.RecordScreen
 import io.github.martinzitka.trailog.ui.record.RecordViewModel
 import io.github.martinzitka.trailog.ui.sensors.SensorsScreen
@@ -53,9 +54,10 @@ import io.github.martinzitka.trailog.ui.theme.TrailogTheme
 @Composable
 fun TrailogApp() {
     val context = LocalContext.current
-    // The two app-wide preferences are read once, here, and pushed down: the theme as parameters
-    // and the unit system as the ambient formatter. Changing either in Settings repaints the whole
-    // tree immediately, which is why they are read at the root rather than per screen.
+    // The app-wide preferences are read once, here, and pushed down: the theme as parameters, the
+    // unit system as the ambient formatter, and trail visibility as an ambient flag every map
+    // reads. Changing any of them in Settings repaints the tree immediately, which is why they are
+    // read at the root rather than per screen.
     val preferences by PrefsAppSettings.get(context).preferences.collectAsStateWithLifecycle()
 
     // Remembered against the unit system, not rebuilt per recomposition: LocalFormatter is a static
@@ -71,7 +73,10 @@ fun TrailogApp() {
         },
         dynamicColor = preferences.dynamicColour,
     ) {
-        CompositionLocalProvider(LocalFormatter provides formatter) {
+        CompositionLocalProvider(
+            LocalFormatter provides formatter,
+            LocalShowTrails provides preferences.showTrails,
+        ) {
             TrailogNavigation()
         }
     }

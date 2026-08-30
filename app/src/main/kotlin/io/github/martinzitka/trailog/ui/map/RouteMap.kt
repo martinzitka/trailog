@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -92,6 +93,24 @@ sealed interface MapInteraction {
         val onMapClick: ((TracePoint) -> Unit)? = null,
     ) : MapInteraction
 }
+
+/**
+ * Whether maps draw the style's paths and trails, provided at the app root from the user's
+ * preference.
+ *
+ * An ambient value rather than a parameter on [RouteMap] because it is a display preference that
+ * belongs to *every* map equally — the Record screen's, the detail preview's and the fullscreen
+ * map's — and threading it through three screens that otherwise have no opinion about it would put
+ * the setting in the signature of every one of them. This is the same reasoning that puts the unit
+ * system behind `LocalFormatter`.
+ *
+ * `compositionLocalOf` rather than `staticCompositionLocalOf`: the value is a Boolean compared by
+ * equality, so only the maps that read it need to recompose when it changes.
+ *
+ * The default is true, which matters for tests and previews: a map composed outside the app root
+ * draws the style as the style author wrote it.
+ */
+val LocalShowTrails = compositionLocalOf { true }
 
 /**
  * The map seam. Every screen that shows a route goes through this and nothing else.
@@ -180,6 +199,9 @@ fun RouteMap(
                 archive = archive,
                 gesturesEnabled = gestures != null,
                 styleAssetPath = styleAsset,
+                // The fallback renderer draws no tiles at all, so there are no trails to hide
+                // there and nothing to pass on to it.
+                showTrails = LocalShowTrails.current,
                 lineColor = lineColor,
                 showEndMarker = showEndMarker,
                 endMarkerColor = endMarkerColor,

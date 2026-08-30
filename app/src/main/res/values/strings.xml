@@ -279,6 +279,15 @@
     <string name="settings_keep_screen_on_body">Useful on a handlebar mount. Costs battery on long
         rides, so it stays off unless you turn it on. Recording itself never needs the screen.</string>
 
+    <!-- Settings — map. -->
+    <string name="settings_group_map">Map</string>
+    <string name="settings_show_trails_label">Show paths and trails</string>
+    <string name="settings_show_trails_body">Footpaths, cycleways, bridleways and MTB trails,
+        drawn as dashed lines over the map.</string>
+    <string name="settings_show_trails_note">Paths only exist in the map data from zoom 14, so
+        this changes nothing until you pinch in past street level. Forest tracks are roads and
+        are always drawn.</string>
+
     <!-- Fullscreen map and its linked charts. -->
     <string name="map_open_fullscreen">Open the fullscreen map</string>
     <string name="map_cursor_hint">Touch the chart or the map to inspect a point of the

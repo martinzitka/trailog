@@ -70,6 +70,8 @@ enum class MapCameraMode {
  * @param onMapClick a tap on the map, reported as the coordinate under the finger.
  * @param onFollowBrokenByUser invoked when a user gesture moves the camera, so the caller can
  *   offer a re-centre control.
+ * @param showTrails whether the style's trail layer group is drawn. Applied after the style loads
+ *   rather than by editing the JSON, so flipping it repaints the map that is already on screen.
  */
 @Composable
 internal fun MapLibreRouteMap(
@@ -82,6 +84,7 @@ internal fun MapLibreRouteMap(
     recentreToken: Int,
     onFollowBrokenByUser: () -> Unit,
     modifier: Modifier = Modifier,
+    showTrails: Boolean = true,
     showEndMarker: Boolean = false,
     endMarkerColor: Color = Color.Blue,
     marker: TracePoint? = null,
@@ -115,6 +118,10 @@ internal fun MapLibreRouteMap(
 
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
+
+    // Which layers the trail toggle addresses, read out of the style that was actually loaded
+    // rather than hardcoded here. Empty until the style has been read.
+    var trailLayers by remember { mutableStateOf(emptyList<String>()) }
 
     // MapView is a plain Android View with a hand-rolled lifecycle that must be driven manually;
     // skipping onStop/onDestroy leaks the GL surface and the location engine.
@@ -150,6 +157,7 @@ internal fun MapLibreRouteMap(
                         tileUrl = MapTiles.tileUrl(archive),
                         assetPath = styleAssetPath,
                     )
+                    trailLayers = MapTiles.trailLayerIds(json)
                     libreMap.setStyle(Style.Builder().fromJson(json)) { styleReady = true }
 
                     // A map the user cannot move needs no gesture handling at all. Turning the
@@ -240,6 +248,17 @@ internal fun MapLibreRouteMap(
         if (!libreMap.projection.visibleRegion.latLngBounds.contains(latLng)) {
             libreMap.easeCamera(CameraUpdateFactory.newLatLng(latLng))
         }
+    }
+
+    // Paths and trails, on or off (the Settings toggle).
+    //
+    // Toggling visibility on the loaded style rather than filtering the JSON before it is parsed:
+    // the style is loaded once per map, and a user who flips the switch expects the map behind
+    // Settings to have changed when they come back, not on the next cold start.
+    LaunchedEffect(map, styleReady, showTrails, trailLayers) {
+        val libreMap = map ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        libreMap.getStyle { style -> style.setTrailsVisible(trailLayers, showTrails) }
     }
 
     // Camera. FIT_BOUNDS runs once per route; FOLLOW_END tracks the newest point.
@@ -409,6 +428,20 @@ private fun Style.setCursor(marker: TracePoint?) {
             PropertyFactory.iconIgnorePlacement(true),
         ),
     )
+}
+
+/**
+ * Shows or hides a group of style layers by id.
+ *
+ * A layer named in the group but absent from the style is skipped rather than reported: the ids
+ * come from the same file the layers do, and `BundledStyleTest` already fails CI if one of them
+ * names nothing. Crashing a map over a cosmetic setting would be the worse trade.
+ */
+private fun Style.setTrailsVisible(layerIds: List<String>, visible: Boolean) {
+    val visibility = if (visible) Property.VISIBLE else Property.NONE
+    for (id in layerIds) {
+        getLayer(id)?.setProperties(PropertyFactory.visibility(visibility))
+    }
 }
 
 /**
