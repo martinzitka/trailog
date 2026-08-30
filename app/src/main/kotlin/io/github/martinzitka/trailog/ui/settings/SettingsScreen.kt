@@ -1,5 +1,8 @@
 package io.github.martinzitka.trailog.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,7 +14,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
@@ -20,11 +27,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.martinzitka.trailog.R
+import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.format.UnitSystem
 
 /**
@@ -40,13 +52,39 @@ import io.github.martinzitka.trailog.ui.format.UnitSystem
  *
  * There is no save button. Every change applies immediately and app-wide — the theme repaints and
  * every figure re-renders while this screen is still open.
+ *
+ * The Data group is the exception to all of that: it holds an action, not a setting. "Export all
+ * activities" lives here because this is where the rest of the data rights will land — full export
+ * and full deletion are product features, not afterthoughts (CLAUDE.md) — and because History is
+ * better left as a list. The work belongs to [ExportViewModel]; this screen only picks the
+ * destination and names the file, which is display-edge work like every other string here.
  */
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    exportViewModel: ExportViewModel,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val exportState by exportViewModel.uiState.collectAsStateWithLifecycle()
+
+    // Hoisted out of the composable scope so the launcher callback below can capture them: a
+    // CompositionLocal cannot be read from inside a plain lambda.
+    val format = LocalFormatter.current
+    val context = LocalContext.current
+
+    // The user picks the destination; the app never writes to storage it chose itself. A null uri
+    // means they backed out of the picker, which is not a failure and leaves the row untouched.
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(ZIP_MIME_TYPE),
+    ) { uri ->
+        if (uri != null) {
+            exportViewModel.exportAll(
+                openSink = { context.contentResolver.openOutputStream(uri) },
+                entryName = { slug, startTime -> format.exportFileName(slug, startTime, "gpx") },
+            )
+        }
+    }
 
     Column(
         modifier = modifier
@@ -120,8 +158,83 @@ fun SettingsScreen(
                 onCheckedChange = viewModel::setKeepScreenOnWhileRecording,
             )
         }
+
+        SettingsGroup(stringResource(R.string.settings_group_data)) {
+            ActionRow(
+                label = stringResource(R.string.settings_export_all_label),
+                body = stringResource(R.string.settings_export_all_body),
+                icon = Icons.Filled.FileDownload,
+                enabled = exportState !is ExportUiState.Running,
+                onClick = {
+                    exportLauncher.launch(
+                        format.exportFileName(
+                            slug = EXPORT_ARCHIVE_SLUG,
+                            epochMillis = System.currentTimeMillis(),
+                            extension = "zip",
+                        ),
+                    )
+                },
+            )
+            ExportStatus(exportState)
+            Note(stringResource(R.string.settings_export_all_note))
+        }
     }
 }
+
+/**
+ * What the export is doing, or what it did. Rendered in the group rather than as a snackbar: an
+ * export of several hundred rides runs long enough that its progress has to stay on screen, and a
+ * transient message would take the outcome away with it.
+ */
+@Composable
+private fun ExportStatus(state: ExportUiState) {
+    when (state) {
+        is ExportUiState.Idle -> Unit
+
+        is ExportUiState.Running -> Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = if (state.total > 0) {
+                    stringResource(R.string.settings_export_running, state.done, state.total)
+                } else {
+                    stringResource(R.string.settings_export_starting)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            // Indeterminate until the worklist has been counted, which is one query: a bar sitting
+            // at zero would suggest nothing is happening.
+            if (state.total > 0) {
+                LinearProgressIndicator(
+                    progress = { state.done.toFloat() / state.total },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+
+        is ExportUiState.Done -> Note(
+            if (state.count == 0) {
+                stringResource(R.string.settings_export_empty)
+            } else {
+                pluralStringResource(R.plurals.settings_export_done, state.count, state.count)
+            },
+        )
+
+        is ExportUiState.Failed -> Note(
+            text = stringResource(R.string.settings_export_failed),
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+/** The proposed name of the archive, before the date stamp the formatter appends. */
+private const val EXPORT_ARCHIVE_SLUG = "activities"
+
+private const val ZIP_MIME_TYPE = "application/zip"
 
 private val ThemeMode.labelRes: Int
     get() = when (this) {
@@ -213,6 +326,48 @@ private fun ToggleRow(
     }
 }
 
+/**
+ * Something the row *does*, rather than a value it holds — the one shape in this screen that is
+ * not a setting. As with the others the whole row is the target and owns the semantics, and the
+ * trailing icon is decorative because the label already says what will happen.
+ */
+@Composable
+private fun ActionRow(
+    label: String,
+    body: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val contentColour = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_ALPHA)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = contentColour)
+            Text(
+                body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(icon, contentDescription = null, tint = contentColour)
+    }
+}
+
+/** Material's disabled-content opacity, applied to the row's own colours. */
+private const val DISABLED_ALPHA = 0.38f
+
 @Composable
 private fun SubHeading(text: String) {
     Text(
@@ -224,11 +379,11 @@ private fun SubHeading(text: String) {
 }
 
 @Composable
-private fun Note(text: String) {
+private fun Note(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = color,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -18,6 +19,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import io.github.martinzitka.trailog.core.model.Activity
+import io.github.martinzitka.trailog.core.model.ActivityType
+import io.github.martinzitka.trailog.data.ActivityRef
 import io.github.martinzitka.trailog.ui.format.Formatter
 import io.github.martinzitka.trailog.ui.format.LocalFormatter
 import io.github.martinzitka.trailog.ui.format.UnitSystem
@@ -34,6 +38,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.ByteArrayOutputStream
+import java.util.UUID
 
 /**
  * Compose UI test for the Settings screen. Robolectric drives Compose as a JVM test, so this runs
@@ -70,10 +76,28 @@ class SettingsScreenTest {
         dynamicColourSupported: Boolean = true,
     ) = SettingsViewModel(settings, dynamicColourSupported)
 
+    /**
+     * The export half of the screen. Defaults to an empty history, which is what most of these
+     * tests want: the Data group renders and nothing runs.
+     */
+    private fun exportViewModel(
+        refs: List<ActivityRef> = emptyList(),
+    ) = ExportViewModel(
+        activityRefs = { refs },
+        loadActivity = { id ->
+            Activity(
+                id = UUID.nameUUIDFromBytes(id.toByteArray()),
+                type = ActivityType.CYCLING,
+                name = "Ride",
+                points = emptyList(),
+            )
+        },
+    )
+
     // ---- the controls ----
 
     @Test fun `every setting is rendered with its current value`() {
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel()) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel()) } }
 
         composeRule.onNodeWithText("Units").assertIsDisplayed()
         composeRule.onNodeWithText("Metric").assertIsSelected()
@@ -91,20 +115,20 @@ class SettingsScreenTest {
     @Test fun `the trail toggle warns that it only shows above zoom 14`() {
         // Without this the setting reads as broken: every map opens fitted to a whole route, well
         // below the zoom at which the archive has any path data to draw.
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel()) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel()) } }
         composeRule.onNodeWithText("zoom 14", substring = true)
             .performScrollTo().assertIsDisplayed()
     }
 
     @Test fun `the units explanation says recordings are unaffected`() {
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel()) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel()) } }
         composeRule.onNodeWithText("always stored in metric", substring = true)
             .performScrollTo().assertIsDisplayed()
     }
 
     @Test fun `picking a theme selects it and deselects the others`() {
         val settings = FakeSettings()
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(settings)) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(settings), exportViewModel()) } }
 
         composeRule.onNodeWithText("Dark").performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -115,7 +139,7 @@ class SettingsScreenTest {
 
     @Test fun `toggling keep-screen-on flips the switch and is stored`() {
         val settings = FakeSettings()
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(settings)) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(settings), exportViewModel()) } }
 
         composeRule.onNodeWithText("Keep screen on while recording").performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -130,11 +154,38 @@ class SettingsScreenTest {
      */
     @Test fun `Material You is absent where the platform cannot honour it`() {
         composeRule.setContent {
-            TrailogTheme { SettingsScreen(viewModel(dynamicColourSupported = false)) }
+            TrailogTheme { SettingsScreen(viewModel(dynamicColourSupported = false), exportViewModel()) }
         }
         composeRule.onNodeWithText("Material You colours").assertDoesNotExist()
         // The rest of Appearance is still there.
         composeRule.onNodeWithText("Appearance").performScrollTo().assertIsDisplayed()
+    }
+
+    // ---- the data group ----
+
+    @Test fun `the data group offers an export of the whole history`() {
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel()) } }
+
+        composeRule.onNodeWithText("Data").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Export all activities").performScrollTo().assertIsDisplayed()
+        // The promise that makes this export trustworthy: gaps are not welded into straight lines.
+        composeRule.onNodeWithText("separate track segments", substring = true)
+            .performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun `a finished export says what it wrote`() {
+        val vm = exportViewModel(refs = listOf(ActivityRef(id = "a", startTime = 1_000L)))
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), vm) } }
+
+        vm.exportAll(
+            openSink = { ByteArrayOutputStream() },
+            entryName = { slug, startTime -> "$slug-$startTime.gpx" },
+        )
+
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Exported 1 activity.").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Exported 1 activity.").performScrollTo().assertIsDisplayed()
     }
 
     // ---- the setting actually does something ----
@@ -149,7 +200,7 @@ class SettingsScreenTest {
                 TrailogTheme {
                     val format = LocalFormatter.current
                     Text(format.distance(12_345.0))
-                    SettingsScreen(viewModel(settings))
+                    SettingsScreen(viewModel(settings), exportViewModel())
                 }
             }
         }
@@ -174,7 +225,7 @@ class SettingsScreenTest {
             CompositionLocalProvider(LocalShowTrails provides prefs.showTrails) {
                 TrailogTheme {
                     Text(if (LocalShowTrails.current) "trails drawn" else "trails hidden")
-                    SettingsScreen(viewModel(settings))
+                    SettingsScreen(viewModel(settings), exportViewModel())
                 }
             }
         }
@@ -205,7 +256,7 @@ class SettingsScreenTest {
                             Text("To settings")
                         }
                     }
-                    composable("settings") { SettingsScreen(vm) }
+                    composable("settings") { SettingsScreen(vm, exportViewModel()) }
                 }
             }
         }
