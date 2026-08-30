@@ -43,6 +43,9 @@ class SettingsViewModelTest {
 
         override fun setKeepScreenOnWhileRecording(enabled: Boolean) =
             state.update { it.copy(keepScreenOnWhileRecording = enabled) }
+
+        override fun setShowTrails(enabled: Boolean) =
+            state.update { it.copy(showTrails = enabled) }
     }
 
     private fun viewModel(
@@ -60,6 +63,10 @@ class SettingsViewModelTest {
         assertFalse(
             "ADR 0011: recording must not hold the screen on unless asked",
             state.keepScreenOnWhileRecording,
+        )
+        assertTrue(
+            "the style draws trails; the toggle exists to hide them, not to reveal them",
+            state.showTrails,
         )
     }
 
@@ -93,6 +100,7 @@ class SettingsViewModelTest {
         vm.setDynamicColour(false)
         vm.setKeepScreenOnWhileRecording(true)
         vm.setUnitSystem(UnitSystem.IMPERIAL)
+        vm.setShowTrails(false)
 
         assertEquals(
             AppPreferences(
@@ -100,9 +108,23 @@ class SettingsViewModelTest {
                 themeMode = ThemeMode.DARK,
                 dynamicColour = false,
                 keepScreenOnWhileRecording = true,
+                showTrails = false,
             ),
             settings.preferences.value,
         )
+    }
+
+    @Test fun `hiding trails is stored and reflected, and reversible`() = runTest(dispatcher) {
+        val settings = FakeSettings()
+        val vm = viewModel(settings)
+        vm.uiState.test {
+            assertTrue(awaitItem().showTrails)
+            vm.setShowTrails(false)
+            assertFalse(awaitItem().showTrails)
+            vm.setShowTrails(true)
+            assertTrue(awaitItem().showTrails)
+        }
+        assertTrue(settings.preferences.value.showTrails)
     }
 
     @Test fun `every theme mode round-trips`() {
