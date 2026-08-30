@@ -153,6 +153,30 @@ class MapTilesTest {
         assertTrue("sprite is not local", json.contains("asset://map/sprite"))
     }
 
+    // --- The trail layer group ---------------------------------------------------------------
+
+    @Test fun `reads the trail layer group the bundled style declares`() {
+        // The toggle addresses layers by id, and those ids live in the style. This is the half of
+        // that contract on the Kotlin side; BundledStyleTest asserts the other half, that every
+        // declared id names a layer that exists.
+        val json = MapTiles.loadStyleJson(context, "pmtiles://file:///t.pmtiles", "map/style.json")
+
+        val ids = MapTiles.trailLayerIds(json)
+
+        assertTrue("no trail layers declared", ids.isNotEmpty())
+        assertTrue("the MTB underlay is not in the group", ids.contains("trailog-path-mtb"))
+        assertTrue(
+            "forest tracks are roads and must stay visible: $ids",
+            ids.none { it.startsWith("trailog-track") },
+        )
+    }
+
+    @Test fun `a style with no declared group hides nothing rather than failing`() {
+        // A hand-edited or older style must not take the map down over a cosmetic setting.
+        assertEquals(emptyList<String>(), MapTiles.trailLayerIds("""{"layers":[]}"""))
+        assertEquals(emptyList<String>(), MapTiles.trailLayerIds("not json at all"))
+    }
+
     @Test fun `fails loudly when the asset and the fetch script have drifted apart`() {
         // Substituting into a style with no placeholder would yield a map with no tiles and no
         // explanation. sprite.json is a convenient stand-in for any asset lacking the marker.

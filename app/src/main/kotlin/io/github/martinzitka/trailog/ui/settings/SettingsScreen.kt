@@ -31,11 +31,12 @@ import io.github.martinzitka.trailog.ui.format.UnitSystem
  * Settings — and only settings something actually reads (IMPLEMENTATION_PLAN.md M1.5: "a setting
  * with no effect is a bug, not a placeholder").
  *
- * Three of those exist today, each named with its reader in [AppPreferences]: the unit system,
+ * Four of those exist today, each named with its reader in [AppPreferences]: the unit system,
  * which the display-edge formatter reads; the theme mode and Material You toggle, which the app's
- * theme reads; and whether to hold the screen on while recording, which the Record screen reads
- * (ADR 0011). Material You is hidden below Android 12 rather than shown inert, because a control
- * that cannot change anything fails the same rule.
+ * theme reads; whether to draw paths and trails, which every map reads through `LocalShowTrails`;
+ * and whether to hold the screen on while recording, which the Record screen reads (ADR 0011).
+ * Material You is hidden below Android 12 rather than shown inert, because a control that cannot
+ * change anything fails the same rule.
  *
  * There is no save button. Every change applies immediately and app-wide — the theme repaints and
  * every figure re-renders while this screen is still open.
@@ -96,6 +97,19 @@ fun SettingsScreen(
                     onCheckedChange = viewModel::setDynamicColour,
                 )
             }
+        }
+
+        SettingsGroup(stringResource(R.string.settings_group_map)) {
+            ToggleRow(
+                label = stringResource(R.string.settings_show_trails_label),
+                body = stringResource(R.string.settings_show_trails_body),
+                checked = state.showTrails,
+                onCheckedChange = viewModel::setShowTrails,
+            )
+            // The zoom floor is the whole reason this note exists: paths are absent from the
+            // archive below z14, so a user who flips the switch while looking at a fitted route
+            // sees nothing change and concludes the setting is broken.
+            Note(stringResource(R.string.settings_show_trails_note))
         }
 
         SettingsGroup(stringResource(R.string.settings_group_recording)) {

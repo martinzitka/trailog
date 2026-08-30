@@ -28,6 +28,7 @@ data class SettingsUiState(
     val dynamicColour: Boolean = true,
     val dynamicColourSupported: Boolean = true,
     val keepScreenOnWhileRecording: Boolean = false,
+    val showTrails: Boolean = true,
 )
 
 /**
@@ -58,6 +59,7 @@ class SettingsViewModel(
         dynamicColour = dynamicColour,
         dynamicColourSupported = dynamicColourSupported,
         keepScreenOnWhileRecording = keepScreenOnWhileRecording,
+        showTrails = showTrails,
     )
 
     fun setUnitSystem(units: UnitSystem) = settings.setUnitSystem(units)
@@ -68,6 +70,8 @@ class SettingsViewModel(
 
     fun setKeepScreenOnWhileRecording(enabled: Boolean) =
         settings.setKeepScreenOnWhileRecording(enabled)
+
+    fun setShowTrails(enabled: Boolean) = settings.setShowTrails(enabled)
 
     class Factory(context: Context) : ViewModelProvider.Factory {
         private val appContext = context.applicationContext

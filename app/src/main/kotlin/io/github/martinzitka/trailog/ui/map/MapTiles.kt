@@ -2,6 +2,7 @@ package io.github.martinzitka.trailog.ui.map
 
 import android.content.Context
 import android.util.Log
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -34,6 +35,22 @@ object MapTiles {
      * real URL is substituted here.
      */
     private const val TILE_URL_PLACEHOLDER = "__TRAILOG_TILE_URL__"
+
+    /**
+     * Style metadata key naming every layer that draws a path or trail — footways, cycleways,
+     * bridleways, the MTB underlay, steps, and their bridge and tunnel variants, plus the path
+     * label layer.
+     *
+     * The group is declared in the style rather than listed in Kotlin because the style is what
+     * knows which layers it split trails into: the fork already added four of them and a later
+     * one will add more. `BundledStyleTest` asserts every declared id exists, which is what stops
+     * the two drifting apart.
+     *
+     * Forest tracks (`trailog-track*`) are deliberately **not** in the group. They are roads —
+     * driveable, and the way most rides leave a village — so hiding them under a control labelled
+     * "paths and trails" would remove things the user still needs to navigate by.
+     */
+    private const val TRAIL_LAYERS_KEY = "trailog:trailLayers"
 
     /**
      * The archive to render, or null when none has been installed yet.
@@ -138,5 +155,30 @@ object MapTiles {
                 "re-run infra/tiles/fetch-style-assets.sh"
         }
         return template.replace(TILE_URL_PLACEHOLDER, tileUrl)
+    }
+
+    /**
+     * The ids of the style's trail layers, read from its `metadata`.
+     *
+     * Empty when the style declares no group. That is a drift between the asset and this code
+     * rather than a user-visible failure — the map still renders, the trail toggle simply stops
+     * doing anything — so it logs instead of throwing, and `BundledStyleTest` is what fails
+     * loudly in CI.
+     */
+    fun trailLayerIds(styleJson: String): List<String> {
+        val declared = runCatching {
+            val array = JSONObject(styleJson)
+                .getJSONObject("metadata")
+                .getJSONArray(TRAIL_LAYERS_KEY)
+            (0 until array.length()).map { array.getString(it) }
+        }.getOrDefault(emptyList())
+
+        if (declared.isEmpty()) {
+            Log.w(
+                TAG,
+                "Bundled style declares no $TRAIL_LAYERS_KEY; the trail toggle will do nothing",
+            )
+        }
+        return declared
     }
 }

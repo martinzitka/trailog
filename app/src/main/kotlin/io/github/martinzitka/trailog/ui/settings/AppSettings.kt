@@ -23,7 +23,8 @@ enum class ThemeMode {
  * added to it arrives together with the code that acts on it.
  *
  * The defaults here are the app's behaviour before the user ever opens Settings, so they must
- * match what the app did previously: metric, system theme, dynamic colour on, screen not held on.
+ * match what the app did previously: metric, system theme, dynamic colour on, screen not held on,
+ * trails drawn.
  */
 data class AppPreferences(
     /** Read by `Formatter` via `LocalFormatter` — the single display edge. */
@@ -34,6 +35,8 @@ data class AppPreferences(
     val dynamicColour: Boolean = true,
     /** Read by the Record screen's wake flag while recording (ADR 0011). */
     val keepScreenOnWhileRecording: Boolean = false,
+    /** Read by `RouteMap` through `LocalShowTrails`, which hides the style's trail layer group. */
+    val showTrails: Boolean = true,
 )
 
 /**
@@ -51,6 +54,7 @@ interface AppSettings {
     fun setThemeMode(mode: ThemeMode)
     fun setDynamicColour(enabled: Boolean)
     fun setKeepScreenOnWhileRecording(enabled: Boolean)
+    fun setShowTrails(enabled: Boolean)
 }
 
 /**
@@ -77,6 +81,7 @@ class PrefsAppSettings private constructor(context: Context) : AppSettings {
         themeMode = prefs.getString(KEY_THEME, null).toEnum(ThemeMode.SYSTEM),
         dynamicColour = prefs.getBoolean(KEY_DYNAMIC_COLOUR, true),
         keepScreenOnWhileRecording = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false),
+        showTrails = prefs.getBoolean(KEY_SHOW_TRAILS, true),
     )
 
     override fun setUnitSystem(units: UnitSystem) {
@@ -99,11 +104,17 @@ class PrefsAppSettings private constructor(context: Context) : AppSettings {
         state.update { it.copy(keepScreenOnWhileRecording = enabled) }
     }
 
+    override fun setShowTrails(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_TRAILS, enabled).apply()
+        state.update { it.copy(showTrails = enabled) }
+    }
+
     companion object {
         private const val KEY_UNITS = "unit_system"
         private const val KEY_THEME = "theme_mode"
         private const val KEY_DYNAMIC_COLOUR = "dynamic_colour"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on_while_recording"
+        private const val KEY_SHOW_TRAILS = "show_trails"
 
         @Volatile private var instance: PrefsAppSettings? = null
 
