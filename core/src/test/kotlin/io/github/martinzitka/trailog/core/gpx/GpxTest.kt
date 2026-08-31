@@ -103,6 +103,7 @@ class GpxTest {
     fun `written gpx is valid and preserves segment structure`() {
         val track = GpxTrack(
             name = "Test",
+            description = null,
             type = "cycling",
             points = listOf(
                 pt(0, 0, 50.0, 14.0, alt = 200.0),
@@ -123,6 +124,7 @@ class GpxTest {
     fun `round-trips a phone activity without losing non-core fields`() {
         val original = GpxTrack(
             name = "Durable ride",
+            description = "Notes that must survive",
             type = "mountain_biking",
             points = listOf(
                 pt(0, 0, 50.0, 14.0, alt = 200.0, accuracy = 1.5, speed = 3.2, bearing = 90.0, pressure = 101325.0),
@@ -134,6 +136,7 @@ class GpxTest {
         val reparsed = Gpx.read(Gpx.write(original)).single()
 
         assertEquals(original.name, reparsed.name)
+        assertEquals(original.description, reparsed.description)
         assertEquals(original.type, reparsed.type)
         assertEquals(original.points, reparsed.points)
     }
@@ -141,7 +144,7 @@ class GpxTest {
     @Test
     fun `round-trips tiny values without scientific notation`() {
         // A near-zero speed must not serialize as 1.0E-4 (some parsers reject it).
-        val track = GpxTrack(null, null, listOf(pt(0, 0, 50.0, 14.0, speed = 0.0001)))
+        val track = GpxTrack(null, null, null, listOf(pt(0, 0, 50.0, 14.0, speed = 0.0001)))
         val xml = Gpx.write(track)
         assertTrue(xml.contains("0.0001"), "expected plain decimal, got:\n$xml")
         assertTrue(!xml.contains("E-", ignoreCase = true), "must not use scientific notation")
@@ -179,5 +182,107 @@ class GpxTest {
         """.trimIndent()
         // 20:00 at +02:00 is 18:00 UTC.
         assertEquals(Instant.parse("2026-08-03T18:00:00Z"), Gpx.read(xml).single().points[0].time)
+    }
+
+    // ---- document-level metadata ----------------------------------------------------------
+
+    /**
+     * The document shape some exporters emit: a file-level name and desc, with an author block
+     * that nests its own <name> immediately after. Reading this wrong is not hypothetical — a
+     * naive handler lets the author's name overwrite the file's, so every such file would appear
+     * to be named after the account holder. Contents here are placeholders.
+     */
+    private val sportsTrackerShape = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx xmlns="http://www.topografix.com/GPX/1/1" creator="Sports Tracker" version="1.1">
+          <metadata>
+            <name>8/29/26 11:35</name>
+            <desc>Ridge loop</desc>
+            <author><name>Example User</name></author>
+          </metadata>
+          <trk><name>8/29/26 11:35</name><trkseg>
+            <trkpt lat="50.0" lon="14.0"><ele>300</ele><time>2026-08-29T09:35:00Z</time></trkpt>
+          </trkseg></trk>
+        </gpx>
+    """.trimIndent()
+
+    @Test
+    fun `reads document metadata and the creator attribute`() {
+        val doc = Gpx.readDocument(sportsTrackerShape)
+        assertEquals("Sports Tracker", doc.creator)
+        assertEquals("8/29/26 11:35", doc.name)
+        assertEquals("Ridge loop", doc.description)
+        assertEquals(1, doc.tracks.size)
+    }
+
+    @Test
+    fun `the author name does not overwrite the document name`() {
+        // The whole reason inAuthor exists.
+        assertEquals("8/29/26 11:35", Gpx.readDocument(sportsTrackerShape).name)
+    }
+
+    @Test
+    fun `document metadata does not leak into the track`() {
+        // <metadata><desc> belongs to the file, not the trk. A reader that merged them would
+        // make the importer's Sports-Tracker-specific correction impossible to express.
+        val track = Gpx.readDocument(sportsTrackerShape).tracks.single()
+        assertEquals("8/29/26 11:35", track.name)
+        assertNull(track.description)
+    }
+
+    @Test
+    fun `read returns the same tracks as readDocument`() {
+        assertEquals(Gpx.readDocument(sportsTrackerShape).tracks, Gpx.read(sportsTrackerShape))
+    }
+
+    @Test
+    fun `reads a track-level desc`() {
+        val xml = """
+            <gpx xmlns="http://www.topografix.com/GPX/1/1">
+              <trk>
+                <name>Named</name><desc>Described</desc><type>cycling</type>
+                <trkseg><trkpt lat="50.0" lon="14.0"><time>2026-08-03T18:00:00Z</time></trkpt></trkseg>
+              </trk>
+            </gpx>
+        """.trimIndent()
+        val track = Gpx.read(xml).single()
+        assertEquals("Named", track.name)
+        assertEquals("Described", track.description)
+        assertEquals("cycling", track.type)
+    }
+
+    @Test
+    fun `absent metadata reads as null rather than empty string`() {
+        val xml = """
+            <gpx xmlns="http://www.topografix.com/GPX/1/1">
+              <trk><trkseg>
+                <trkpt lat="50.0" lon="14.0"><time>2026-08-03T18:00:00Z</time></trkpt>
+              </trkseg></trk>
+            </gpx>
+        """.trimIndent()
+        val doc = Gpx.readDocument(xml)
+        assertNull(doc.creator)
+        assertNull(doc.name)
+        assertNull(doc.description)
+        assertNull(doc.tracks.single().description)
+    }
+
+    @Test
+    fun `a written desc is placed where GPX 1_1 requires it`() {
+        // GPX 1.1 fixes child order: name, cmt, desc, ... type. A desc after type is invalid.
+        val xml = Gpx.write(
+            GpxTrack("N", "D", "cycling", listOf(pt(0, 0, 50.0, 14.0))),
+        )
+        assertTrue(xml.indexOf("<name>") < xml.indexOf("<desc>"), "desc must follow name")
+        assertTrue(xml.indexOf("<desc>") < xml.indexOf("<type>"), "desc must precede type")
+    }
+
+    @Test
+    fun `a desc containing markup characters round-trips escaped`() {
+        val nasty = "R&D <ride> \"quoted\""
+        val reparsed = Gpx.read(
+            Gpx.write(GpxTrack(null, nasty, null, listOf(pt(0, 0, 50.0, 14.0)))),
+        ).single()
+        assertEquals(nasty, reparsed.description)
     }
 }

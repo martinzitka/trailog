@@ -73,7 +73,19 @@ object Gpx {
      *
      * @throws GpxParseException if the XML is malformed or a coordinate is unparseable.
      */
-    fun read(xml: String): List<GpxTrack> {
+    fun read(xml: String): List<GpxTrack> = readDocument(xml).tracks
+
+    /**
+     * Parses a GPX document whole: the `creator` attribute, the file-level `<metadata>`, and
+     * every `<trk>`.
+     *
+     * Prefer this over [read] when the file's own metadata matters. Some producers put the
+     * information a user would call the activity's name in `<metadata>` and leave the track
+     * elements bare, so [read] alone cannot see it.
+     *
+     * @throws GpxParseException if the XML is malformed or a coordinate is unparseable.
+     */
+    fun readDocument(xml: String): GpxDocument {
         val handler = GpxHandler()
         try {
             parserFactory.newSAXParser().parse(InputSource(StringReader(xml)), handler)
@@ -86,7 +98,12 @@ object Gpx {
         } catch (e: Exception) {
             throw GpxParseException("malformed GPX: ${e.message}", e)
         }
-        return handler.tracks
+        return GpxDocument(
+            creator = handler.creator,
+            name = handler.metadataName,
+            description = handler.metadataDescription,
+            tracks = handler.tracks,
+        )
     }
 
     /**
@@ -95,13 +112,26 @@ object Gpx {
      */
     private class GpxHandler : DefaultHandler() {
         val tracks = ArrayList<GpxTrack>()
+        var creator: String? = null
+        var metadataName: String? = null
+        var metadataDescription: String? = null
 
         private var name: String? = null
+        private var description: String? = null
         private var type: String? = null
         private var points = ArrayList<RawPoint>()
         private var segmentIndex = -1
         private var inTrack = false
         private var inPoint = false
+        private var inMetadata = false
+
+        /**
+         * `<author>` nests its own `<name>` inside `<metadata>`. Without this guard the author's
+         * name would overwrite the file's — Sports Tracker's export puts both in exactly that
+         * order, so the last one written would win and every file would appear to be named after
+         * the account holder.
+         */
+        private var inAuthor = false
 
         private var lat = 0.0
         private var lon = 0.0
@@ -117,9 +147,14 @@ object Gpx {
         override fun startElement(uri: String?, localName: String?, qName: String?, attributes: Attributes) {
             text.setLength(0)
             when (localOrQ(localName, qName)) {
+                "gpx" -> creator = attributes.getValue("creator")
+                    ?: attributes.getValue("", "creator")
+                "metadata" -> inMetadata = true
+                "author" -> inAuthor = true
                 "trk" -> {
                     inTrack = true
                     name = null
+                    description = null
                     type = null
                     points = ArrayList()
                     segmentIndex = -1
@@ -144,8 +179,17 @@ object Gpx {
         override fun endElement(uri: String?, localName: String?, qName: String?) {
             val value = text.toString().trim()
             when (localOrQ(localName, qName)) {
-                // Track-level metadata, only when not inside a point.
-                "name" -> if (inTrack && !inPoint) name = value
+                // Track-level metadata, only when not inside a point. `<metadata>` sits outside
+                // any `<trk>`, so the two cases never collide; `<author><name>` is excluded
+                // explicitly because it nests inside `<metadata>`.
+                "name" -> when {
+                    inTrack && !inPoint -> name = value
+                    inMetadata && !inAuthor -> metadataName = value
+                }
+                "desc" -> when {
+                    inTrack && !inPoint -> description = value
+                    inMetadata && !inAuthor -> metadataDescription = value
+                }
                 "type" -> if (inTrack && !inPoint) type = value
 
                 // Point-level leaves. `speed`/`course` are also core GPX 1.0 fields.
@@ -174,9 +218,18 @@ object Gpx {
                     inPoint = false
                 }
                 "trk" -> {
-                    tracks.add(GpxTrack(name = name, type = type, points = points))
+                    tracks.add(
+                        GpxTrack(
+                            name = name,
+                            description = description,
+                            type = type,
+                            points = points,
+                        ),
+                    )
                     inTrack = false
                 }
+                "metadata" -> inMetadata = false
+                "author" -> inAuthor = false
             }
             text.setLength(0)
         }
@@ -231,6 +284,12 @@ object Gpx {
             nl(sb, 1); sb.append("<trk>")
             if (track.name != null) {
                 nl(sb, 2); sb.append("<name>").append(esc(track.name)).append("</name>")
+            }
+            // GPX 1.1 fixes the order of a <trk>'s children: name, cmt, desc, src, link, number,
+            // type, extensions, trkseg. Emitting <desc> anywhere else produces a document that
+            // strict validators reject, so this sits between name and type deliberately.
+            if (track.description != null) {
+                nl(sb, 2); sb.append("<desc>").append(esc(track.description)).append("</desc>")
             }
             if (track.type != null) {
                 nl(sb, 2); sb.append("<type>").append(esc(track.type)).append("</type>")

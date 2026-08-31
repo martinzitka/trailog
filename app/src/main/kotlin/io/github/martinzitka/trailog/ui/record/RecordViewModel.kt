@@ -51,6 +51,7 @@ class RecordViewModel(
 
     private val environment = MutableStateFlow(RecordEnvironment())
     private val selectedType = MutableStateFlow(settings.lastActivityType())
+    private val recentTypes = MutableStateFlow(settings.recentActivityTypes())
     private val livePayload = MutableStateFlow<LivePayload?>(null)
     private val _namingPrompt = MutableStateFlow<NamingPrompt?>(null)
 
@@ -67,13 +68,16 @@ class RecordViewModel(
     }
 
     val uiState: StateFlow<RecordUiState> =
-        combine(engine.session, environment, selectedType, livePayload) { session, env, type, live ->
-            reduce(session, env, type, live)
+        combine(
+            engine.session, environment, selectedType, livePayload, recentTypes,
+        ) { session, env, type, live, recent ->
+            reduce(session, env, type, live, recent)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
             initialValue = reduce(
                 engine.session.value, environment.value, selectedType.value, livePayload.value,
+                recentTypes.value,
             ),
         )
 
@@ -100,7 +104,9 @@ class RecordViewModel(
 
     fun start() {
         val type = selectedType.value
-        settings.setLastActivityType(type)
+        settings.noteActivityTypeUsed(type)
+        // Re-read rather than reordering locally, so the chips reflect exactly what was stored.
+        recentTypes.value = settings.recentActivityTypes()
         engine.start(type)
     }
 
@@ -164,6 +170,27 @@ class RecordViewModel(
     // ---- derivation -----------------------------------------------------------------------
 
     /**
+     * The chips the picker offers: the [OFFERED_TYPE_COUNT] most recently used, with [selected]
+     * guaranteed present.
+     *
+     * When the selection is not already among the recent ones — it was picked out of the overflow
+     * — it displaces the *least* recent rather than being prepended. Prepending would reshuffle
+     * the row under the user's finger every time they chose a type, which is a worse trade than
+     * one chip changing at the far end.
+     */
+    private fun offeredTypes(
+        selected: ActivityType,
+        recent: List<ActivityType>,
+    ): List<ActivityType> {
+        val top = recent.take(OFFERED_TYPE_COUNT)
+        return if (selected in top || top.size < OFFERED_TYPE_COUNT) {
+            (top + selected).distinct()
+        } else {
+            top.dropLast(1) + selected
+        }
+    }
+
+    /**
      * Pure mapping from inputs to screen state — the whole phase logic in one testable place.
      * Live data is only trusted when it belongs to the current session, so a stale payload from
      * a just-finished activity never leaks into the next one.
@@ -173,12 +200,13 @@ class RecordViewModel(
         env: RecordEnvironment,
         selected: ActivityType,
         live: LivePayload?,
+        recent: List<ActivityType> = ActivityType.entries,
     ): RecordUiState {
         val validLive = live?.takeIf { session != null && it.activityId == session.activityId.toString() }
         return when (session?.state) {
             null, RecordingState.IDLE ->
                 if (!env.canRecord) RecordUiState.PermissionsMissing(env)
-                else RecordUiState.Ready(selected, env)
+                else RecordUiState.Ready(selected, offeredTypes(selected, recent), env)
 
             RecordingState.RECORDING -> RecordUiState.Recording(
                 activityType = session.type,
@@ -263,5 +291,13 @@ class RecordViewModel(
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
+
+        /**
+         * How many activity types the picker shows as chips before the rest go to the overflow.
+         *
+         * Five fits two rows on a narrow screen and leaves the start button above the fold, which
+         * is the constraint that produced this whole arrangement — fifteen chips buried it.
+         */
+        const val OFFERED_TYPE_COUNT = 5
     }
 }

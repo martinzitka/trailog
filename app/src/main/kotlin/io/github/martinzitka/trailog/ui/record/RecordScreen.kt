@@ -27,6 +27,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -246,18 +254,11 @@ private fun ReadyContent(
     Text(stringResource(R.string.record_ready_hint), style = MaterialTheme.typography.bodyLarge)
 
     Text(stringResource(R.string.record_activity_type), style = MaterialTheme.typography.titleMedium)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ActivityType.entries.forEach { type ->
-            FilterChip(
-                selected = state.activityType == type,
-                onClick = { onSelectType(type) },
-                leadingIcon = {
-                    Icon(type.icon(), contentDescription = null, modifier = Modifier.sizeIn(maxWidth = 18.dp, maxHeight = 18.dp))
-                },
-                label = { Text(type.label()) },
-            )
-        }
-    }
+    ActivityTypePicker(
+        selected = state.activityType,
+        offered = state.offeredTypes,
+        onSelectType = onSelectType,
+    )
 
     LiveTraceMap(segments = emptyList(), onTouchedChange = onMapTouchedChange)
 
@@ -271,6 +272,88 @@ private fun ReadyContent(
         onOpenSettings = onOpenSettings,
         onFixBattery = onFixBattery,
     )
+}
+
+/**
+ * The activity type control: a chip for each of the recently used types, plus an overflow opening
+ * the full set.
+ *
+ * There are fifteen activity types, most of which exist to carry imported history rather than to
+ * start a recording with — a chip each pushed the start button off the bottom of the screen. The
+ * chips shown are chosen by recent use, so the row reflects what this user actually records
+ * instead of a guess baked into the code, and it stays a fixed height however many types exist.
+ */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun ActivityTypePicker(
+    selected: ActivityType,
+    offered: List<ActivityType>,
+    onSelectType: (ActivityType) -> Unit,
+) {
+    var showAll by rememberSaveable { mutableStateOf(false) }
+
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        offered.forEach { type ->
+            FilterChip(
+                selected = selected == type,
+                onClick = { onSelectType(type) },
+                leadingIcon = {
+                    Icon(
+                        type.icon(),
+                        contentDescription = null,
+                        modifier = Modifier.sizeIn(maxWidth = 18.dp, maxHeight = 18.dp),
+                    )
+                },
+                label = { Text(type.label()) },
+            )
+        }
+        AssistChip(
+            onClick = { showAll = true },
+            label = { Text(stringResource(R.string.record_activity_type_more)) },
+            modifier = Modifier.heightIn(min = 48.dp),
+        )
+    }
+
+    if (showAll) {
+        ModalBottomSheet(onDismissRequest = { showAll = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    stringResource(R.string.record_activity_type_all),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+                ActivityType.entries.forEach { type ->
+                    ListItem(
+                        headlineContent = { Text(type.label()) },
+                        leadingContent = { Icon(type.icon(), contentDescription = null) },
+                        trailingContent = {
+                            if (type == selected) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = stringResource(
+                                        R.string.record_activity_type_selected,
+                                    ),
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .clickable {
+                                onSelectType(type)
+                                showAll = false
+                            },
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

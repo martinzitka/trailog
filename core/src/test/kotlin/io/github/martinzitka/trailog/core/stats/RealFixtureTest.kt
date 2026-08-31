@@ -95,8 +95,12 @@ class RealFixtureTest {
 
     @Test
     fun `sports tracker export parses and reproduces its own published distance`() {
-        // A real third-party file with Garmin TrackPointExtension elements our reader must
-        // tolerate. Our parser + haversine should land on Sports Tracker's own 38.03 km.
+        // A real third-party file our reader must tolerate: it *declares* the Garmin
+        // TrackPointExtension namespace on its root element but uses no extension element
+        // anywhere — no heart rate, no cadence. Worth stating precisely, because M2 turns on
+        // whether the Sports Tracker history carries sensor data worth a FIT decoder, and this
+        // fixture is the only evidence in the repo (ADR 0022).
+        // Our parser + haversine should land on Sports Tracker's own 38.03 km.
         val track = Gpx.read(load("sportstracker_reference.gpx")).single()
         val segments = track.segments()
         assertTrue(track.points.size > 3000, "expected a dense ST track, got ${track.points.size}")

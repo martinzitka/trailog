@@ -100,9 +100,10 @@ Pure Kotlin, developed test-first against fixture tracks.
 - EGM2008 geoid correction for GPS altitude.
 - Barometric elevation fusion: barometer for relative change, GPS/DEM for absolute anchor.
 - GPX reading and writing.
-- FIT **reading** — still required, but for M2 rather than M1: the Sports Tracker export
-  path prefers FIT because it carries heart rate and cadence natively where GPX needs
-  extensions, and there is to be exactly one FIT parser in the project.
+- ~~FIT **reading**~~ — **dropped 2026-08-31.** It was wanted only to carry heart rate and
+  cadence out of Sports Tracker, and the probe required by M2.1 showed there is none to
+  carry. See ADR 0022. GPX is the migration format; no FIT parser is built, and `:core`
+  gains no dependency for one. Revisit only if a future source actually holds sensor data.
 - FIT **writing is optional** (2026-08-30). Nothing in M1 needs it; GPX covers portability,
   and CLAUDE.md's data-portability principle is satisfied without it. Do not let its absence
   block M1. Revisit if a target tool refuses GPX.
@@ -310,22 +311,107 @@ Lives in `tools/sports-tracker-export/`, clearly marked disposable.
 - **An `exportFit` variant of the same endpoint is reported by several independent community
   sources**, switched by swapping that one path segment. It is not offered as a button in the
   web UI, which is why it is easy to conclude only GPX exists — the UI and the API differ here.
-- **Unverified against our own account** (checked 2026-08-30 from public sources only). Some of
-  those scripts date from 2016 and the host has already changed once, from `www.` to `api.`.
-- **FIT would be preferable if it works** — it carries heart rate and cadence natively where GPX
-  needs extensions. That is a property of the formats, not a claim any of those sources made.
-  But it is only worth anything if the historical workouts actually contain that data.
-- **Settle this with one request before committing to a FIT parser.** Export a single old
-  workout both ways and compare. A FIT decoder is either a hand-rolled binary parser or a new
-  `:core` dependency, which CLAUDE.md says requires asking first — too much to build on an
-  assumption about a third-party endpoint. If FIT does not work, or the old rides carry no
-  sensor data worth keeping, GPX alone is enough and FIT can leave the plan entirely.
+- **Both endpoints verified against the real account 2026-08-31.** GPX and FIT each returned
+  HTTP 200 with a genuine body of the requested format. The community sources were right, and
+  the 2016-era route still works.
+- **FIT was dropped, and the question is closed.** It was only ever preferable for carrying heart
+  rate and cadence natively. The probed workout has none: its GPX contains 5,276 track points
+  and **zero** extension elements, and the FIT body is far too small to hold per-point sensor
+  data — 111,475 bytes over 5,276 records is 21.1 bytes each, which is exactly a record of
+  timestamp, latitude, longitude, altitude, distance and speed. Adding heart rate alone would
+  need 116,072 bytes, more than the file contains.
+- **Corrected 2026-08-31 against the full list of 1,557 workouts.** Nine *do* carry heart rate —
+  eight runs from 2013–2016 and one MTB ride from 2020, 134–162 bpm. Cadence is zero across all
+  1,557. FIT stays dropped: nine workouts is 0.6% of the history, their avg and max HR are already
+  preserved in the workout-list JSON, and `RawPoint` has no heart-rate field to put per-point data
+  in anyway. Do not repeat the original overstatement that the history carries none.
+- **Consequence: GPX is the migration format.** No FIT decoder is written, `:core` gains no new
+  dependency, and FIT leaves the plan — see M1.2 and ADR 0022.
+- **Manually entered workouts have no track.** Their distance and duration exist only in the
+  workout-list JSON, which is why `list` saves that response verbatim. An empty GPX is a real
+  case the importer must handle, not a failure.
 - Expect breakage without notice. Not a maintained feature.
 
+**Export completed 2026-08-31: 1,555 of 1,557 files, 1,549 of them intact.** Verified by the
+tool's own `verify` subcommand, which audits the archive offline against the saved workout list.
+
+**Format validity is not proof of content, and assuming it was hid real damage.** `fetch` accepted
+every body that sniffed as GPX — correctly, they *were* GPX — including four exports carrying a
+single track point for rides of 41 to 49 km. Nothing in the download log looked wrong. The audit
+exists because of that, and its rule is a loose sanity bound (one point per 500 m, against a real
+density of one per 10–20 m) chosen to catch collapse rather than grade quality.
+
+**The discriminator for an empty export is `isManuallyAdded`, never distance.** A hand-entered swim
+reports a real distance and has no track; so does a ride whose track was lost. The first is
+expected, the second is data loss, and distance cannot tell them apart. 28 of the 30 track-less
+workouts are manual swims; the other two are a recorded walk and a recorded ride.
+
+**Eight workouts are damaged upstream** — 0.5% of the history, all with title, date, distance,
+duration and elevation intact in the workout list:
+
+| Kind | n | Detail |
+|---|---|---|
+| Server refuses to export | 2 | `error 535, "Couldn't export workout to GPX format"`. FIT returns a valid but **empty** 306-byte file — 0.47 bytes per polyline point — so the per-point data is genuinely gone, not merely unreachable through GPX. |
+| Exported empty, genuinely recorded | 2 | One of them is titled "Auto-recovered" — Sports Tracker's own crash recovery ran, and the track evidently did not survive it. |
+| Exported with 1–2 points | 4 | Three fall on consecutive days, which points at something wrong at recording time rather than random server-side loss. |
+
+**Do not reconstruct these from the stored polyline.** It is tempting — the polylines reproduce
+99.6–99.8% of the reported distance at 16–20 m spacing — but they carry **no timestamps and no
+elevation**, and `RawPoint.time` is non-null by design. Spreading points evenly across the duration
+would fabricate data and silently corrupt moving time and every speed figure. These import as
+track-less activities, exactly like the manual swims: honestly summary-only beats plausibly wrong.
+
 ### M2.2 Import CLI (`:tools:importer`)
-Durable. A JVM CLI that uses `:core` for parsing, so there is exactly one GPX parser and
-one FIT parser in the project.
-- Reads a folder of GPX/FIT/TCX files, produces activities, deduplicates on re-run.
+Durable. A JVM CLI that uses `:core` for parsing, so there is exactly one GPX parser in the
+project.
+- Reads a folder of GPX files, produces activities, deduplicates on re-run. FIT and TCX are
+  not read — FIT was dropped above, and no TCX source exists to test against.
+- **Handles a track with no points**, which is what a manually entered workout exports as.
+
+**Activity types come from a per-account mapping file, never from a table in this repo.**
+Sports Tracker identifies types by a numeric `activityId` that appears **only in the workout-list
+JSON** — the GPX export carries no `<type>` element at all, which is why `list` is mandatory rather
+than convenient.
+
+That mapping cannot be hardcoded, and not only for privacy. Sports Tracker offers generic "Other
+1…6" slots, so while the common ids are stable across accounts (walking, running, cycling, mountain
+biking), the rest are whatever a given user happened to assign them — the same id means different
+activities to different people. A table baked into the importer would be wrong for everyone except
+its author.
+
+So the importer reads two tab-separated files, supplied by the user and kept out of version
+control alongside the export they describe:
+
+| File | Columns | Purpose |
+|---|---|---|
+| `activity-types.tsv` | `activityId`, `trailogType` | The account's id-to-type mapping. |
+| `type-overrides.tsv` | `workoutKey`, `trailogType`, `note` | Per-workout corrections. |
+
+**The overrides file is not optional bookkeeping.** An id can hold more than one real activity —
+a generic "Other" slot used for two unrelated sports across different years — so no id-to-type rule
+can be correct on its own. Deriving the mapping is a human judgement over the workout list, and
+putting that judgement in a reviewable data file beats burying guesses in code. Unmapped ids fall
+back to `OTHER` rather than failing the import; the run reports which ids landed there.
+
+`ActivityType` therefore gains ten values: `CROSS_COUNTRY_SKIING`, `DOWNHILL_SKIING`, `SWIMMING`,
+`CANOEING`, `INLINE_SKATING`, `ICE_SKATING`, `SNOWKITING`, `BOBSLEIGH`, `RAFTING`, `OTHER`. Adding
+enum values needs no migration — the type is stored by name — but each needs a
+`movingSpeedThreshold` and a `maxPlausibleSpeed`, and fifteen entries in the Record screen's type
+picker is a UI question of its own.
+
+**Name and description are inverted relative to GPX convention.** Sports Tracker writes the user's
+title into `<metadata><desc>` and an auto-generated date into `<name>` (and into `<trk><name>`).
+The JSON agrees: `description` holds the title, `workoutName` holds the date. So the importer maps
+`<desc>` to the activity name and **discards** the date-shaped `<name>` rather than storing a
+formatted timestamp (ADR 0014); History already derives a title from type and date when the name
+is blank. The inversion is gated on `creator="Sports Tracker"` so it cannot corrupt a file from
+anywhere else, and `:core` parses both fields faithfully without applying it.
+
+**Sports Tracker's own statistics are sometimes wrong.** One workout in the archive reports
+0.44 km over a track whose bounding box is 3.5 km across. Trailog recomputes from raw points, so
+importing it fixes the figure — but the acceptance comparison below must treat outliers as
+*suspected source errors* rather than as import bugs, and report them for inspection instead of
+failing.
 - Before M3 exists: writes directly to a local store or emits app-importable output.
 - After M3 exists: authenticates and uploads via the sync API as an ordinary client.
 - Also the natural home for driving the M2.1 scraper.

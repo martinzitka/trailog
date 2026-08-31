@@ -40,3 +40,10 @@ infra/tiles/dist/
 *.osm.pbf
 *.pmtiles
 *.mbtiles
+
+# M2.1 Sports Tracker export output — the developer's real location history, plus a raw API
+# response that carries account identifiers. Never committed. See tools/sports-tracker-export.
+tools/sports-tracker-export/out/
+# Session tokens, wherever someone parks one.
+*.token
+sports-tracker-token*

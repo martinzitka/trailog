@@ -162,8 +162,19 @@ class RecordScreenTest {
         override fun recoverInterruptedSession() = null
     }
 
-    private class FakeSettings(private var type: ActivityType) : RecordSettings {
-        override fun lastActivityType(): ActivityType = type
-        override fun setLastActivityType(type: ActivityType) { this.type = type }
+    /**
+     * Mirrors PrefsRecordSettings' contract: a complete most-recently-used ordering, seeded with
+     * the given type at the front. Returning a short list instead would let a test pass against a
+     * picker that silently offered fewer chips than the real one.
+     */
+    private class FakeSettings(type: ActivityType) : RecordSettings {
+        var recent: List<ActivityType> =
+            listOf(type) + ActivityType.entries.filterNot { it == type }
+            private set
+
+        override fun recentActivityTypes(): List<ActivityType> = recent
+        override fun noteActivityTypeUsed(type: ActivityType) {
+            recent = listOf(type) + recent.filterNot { it == type }
+        }
     }
 }

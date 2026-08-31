@@ -74,6 +74,15 @@ sealed interface RecordUiState {
     /** Idle and able to record. [activityType] is the last-used type, pre-selected. */
     data class Ready(
         val activityType: ActivityType,
+        /**
+         * The activity types to offer as chips, most-recently-used first, with the current
+         * selection guaranteed to be among them.
+         *
+         * A subset rather than every type: there are fifteen, and a chip per type pushed the
+         * start button off the bottom of the screen. The rest stay reachable through the picker's
+         * overflow.
+         */
+        val offeredTypes: List<ActivityType>,
         override val environment: RecordEnvironment,
     ) : RecordUiState
 

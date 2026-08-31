@@ -45,11 +45,14 @@ class RecordViewModelTest {
     /** Every metadata write the ViewModel made, in order. Empty means nothing was written. */
     private val saved = mutableListOf<SavedMetadata>()
 
-    private fun viewModel(engine: RecordingEngine = FakeEngine()): RecordViewModel = RecordViewModel(
+    private fun viewModel(
+        engine: RecordingEngine = FakeEngine(),
+        settings: RecordSettings = FakeSettings(ActivityType.RUNNING),
+    ): RecordViewModel = RecordViewModel(
         engine = engine,
         loadActivity = { null },
         saveMetadata = { id, name, notes, type -> saved += SavedMetadata(id, name, notes, type) },
-        settings = FakeSettings(ActivityType.RUNNING),
+        settings = settings,
         now = { Instant.fromEpochMilliseconds(0) },
         ticker = emptyFlow(),
     )
@@ -291,8 +294,89 @@ class RecordViewModelTest {
         override fun recoverInterruptedSession() = null
     }
 
-    private class FakeSettings(private var type: ActivityType) : RecordSettings {
-        override fun lastActivityType(): ActivityType = type
-        override fun setLastActivityType(type: ActivityType) { this.type = type }
+    /**
+     * Mirrors PrefsRecordSettings' contract: a complete most-recently-used ordering, seeded with
+     * the given type at the front. Returning a short list instead would let a test pass against a
+     * picker that silently offered fewer chips than the real one.
+     */
+    private class FakeSettings(type: ActivityType) : RecordSettings {
+        var recent: List<ActivityType> =
+            listOf(type) + ActivityType.entries.filterNot { it == type }
+            private set
+
+        override fun recentActivityTypes(): List<ActivityType> = recent
+        override fun noteActivityTypeUsed(type: ActivityType) {
+            recent = listOf(type) + recent.filterNot { it == type }
+        }
+    }
+
+    // ---- activity type picker ---------------------------------------------------------------
+
+    /**
+     * Ready state straight from [RecordViewModel.reduce], matching how the rest of this class
+     * tests state. Going through `uiState` would not work: it is a `WhileSubscribed` StateFlow,
+     * so its value does not recompute without a collector.
+     */
+    private fun readyState(
+        selected: ActivityType,
+        recent: List<ActivityType> = FakeSettings(selected).recentActivityTypes(),
+    ): RecordUiState.Ready =
+        viewModel().reduce(
+            session = null,
+            env = allGranted,
+            selected = selected,
+            live = null,
+            recent = recent,
+        ) as RecordUiState.Ready
+
+    @Test fun `the picker offers the five most recently used types`() {
+        val recent = FakeSettings(ActivityType.RUNNING).recentActivityTypes()
+        val offered = readyState(ActivityType.RUNNING, recent).offeredTypes
+        assertEquals(5, offered.size)
+        assertEquals(recent.take(5), offered)
+    }
+
+    @Test fun `a type chosen from the overflow is offered without reshuffling the rest`() {
+        // Bobsleigh is nowhere near the recent five. It must appear so the selection is visible,
+        // and it must displace the least recent rather than jumping to the front, which would
+        // move every other chip under the user's finger.
+        val recent = FakeSettings(ActivityType.RUNNING).recentActivityTypes()
+        val before = readyState(ActivityType.RUNNING, recent).offeredTypes
+        val after = readyState(ActivityType.BOBSLEIGH, recent).offeredTypes
+
+        assertEquals(5, after.size)
+        assertTrue("the selected type must be visible", ActivityType.BOBSLEIGH in after)
+        assertEquals("the leading chips must not move", before.dropLast(1), after.dropLast(1))
+        assertEquals(ActivityType.BOBSLEIGH, after.last())
+    }
+
+    @Test fun `selecting an already-offered type does not change the offered set`() {
+        val recent = FakeSettings(ActivityType.RUNNING).recentActivityTypes()
+        val before = readyState(ActivityType.RUNNING, recent).offeredTypes
+        assertEquals(before, readyState(before[2], recent).offeredTypes)
+    }
+
+    @Test fun `every activity type is visible once selected, however the chips are trimmed`() {
+        // 15 types, 5 chips: the guard is that selecting any of the other 10 still shows it.
+        val recent = FakeSettings(ActivityType.RUNNING).recentActivityTypes()
+        assertTrue("otherwise there is no overflow", ActivityType.entries.size > 5)
+        ActivityType.entries.forEach { type ->
+            val offered = readyState(type, recent).offeredTypes
+            assertTrue("$type must be visible once selected", type in offered)
+            assertEquals(5, offered.size)
+        }
+    }
+
+    @Test fun `starting a recording promotes the type to most recent`() {
+        // Selection alone is not "use" — the existing contract persists the choice on start.
+        val settings = FakeSettings(ActivityType.RUNNING)
+        val vm = viewModel(settings = settings)
+        vm.updateEnvironment(allGranted)
+
+        vm.selectType(ActivityType.SNOWKITING)
+        assertEquals(ActivityType.RUNNING, settings.recentActivityTypes().first())
+
+        vm.start()
+        assertEquals(ActivityType.SNOWKITING, settings.recentActivityTypes().first())
     }
 }
