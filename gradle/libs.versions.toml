@@ -15,6 +15,7 @@ robolectric = "4.14.1"
 androidxTestCore = "1.6.1"
 kotlinxDatetime = "0.6.1"
 turbine = "1.2.0"
+kotlinxSerialization = "1.7.3"
 maplibre = "11.11.0"
 
 [libraries]
@@ -29,6 +30,11 @@ junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "jun
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+
+# --- tools (JVM CLIs) ---
+# Generic JSON tree parsing for the throwaway Sports Tracker scraper. Not used by :core,
+# :app or :server, and it leaves with the tool.
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 
 # --- :app (Android) ---
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
