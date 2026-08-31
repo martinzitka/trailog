@@ -362,6 +362,11 @@ would fabricate data and silently corrupt moving time and every speed figure. Th
 track-less activities, exactly like the manual swims: honestly summary-only beats plausibly wrong.
 
 ### M2.2 Import CLI (`:tools:importer`)
+
+> **Do M2.3's foundation slice first** (2026-08-31). Nine exported workouts carry per-point heart
+> rate, and the importer must write complete rows on its first pass — the dedupe rule means a later
+> re-run skips existing activities instead of backfilling them. See M2.3 below.
+
 Durable. A JVM CLI that uses `:core` for parsing, so there is exactly one GPX parser in the
 project.
 - Reads a folder of GPX files, produces activities, deduplicates on re-run. FIT and TCX are
@@ -423,6 +428,71 @@ failing.
       tolerances in `CLAUDE.md`.
 - [ ] Re-running the import creates no duplicates.
 - [ ] A representative sample added to the `:core` fixture set.
+
+---
+
+## M2.3 Sensor sample stream
+
+**Decided 2026-08-31, and scheduled *before* M2.2 deliberately.** Nine of the exported Sports
+Tracker workouts carry per-point heart rate, and the importer should write complete rows on its
+first pass. The alternative — import now, backfill later — is worse than it looks: the importer
+deduplicates, so a re-run *skips* existing activities rather than filling in what was missing, and
+by then hundreds of imported activities will have been renamed and retyped by hand. A backfill path
+would exist for one purpose and then rot.
+
+### Shape
+
+**A separate timestamped sample stream, not more columns on `RawPoint`.** A field on `RawPoint`
+would only capture a reading when a GPS fix arrives — nothing during a signal blackout or a pause —
+and a heart-rate strap emits at ~1 Hz regardless of what the GPS is doing. Sensor data is its own
+stream that happens to share a clock with the track.
+
+- `:core` gains `SensorSample(time, type, value)` and a `SensorType` enum. Platform-free, as ever.
+- `:app` gains a `sensor_samples` table (activity id, time, type, value), Room migration 2 → 3,
+  indexed on `(activityId, time)`. Non-destructive, like every migration here.
+- Samples align to segments **by timestamp**, and are never interpolated across a segment boundary
+  — the same rule the statistics already follow.
+- Generic `type` + `value` rather than a column per sensor, so a new sensor is a new enum constant
+  rather than a migration. This matches the Sensors screen criterion already in M1.5: "adding a new
+  sensor type later requires adding a row, not restructuring the screen".
+
+### Units: bpm, and why that is not a violation
+
+`CLAUDE.md` requires SI internally with no exceptions. **Each `SensorType` declares its own unit
+instead** — SI where a meaningful SI unit exists (watts, pascals), the domain-standard unit where SI
+would be perverse (bpm, rpm).
+
+The reason is not taste. BLE reports heart rate as an integer bpm, and 140 bpm in hertz is 2.333…,
+which does not round-trip: you get 139.99999 back. Storing hertz would *introduce* the precision
+loss the SI rule exists to prevent. The rule's purpose — exactly one unit per field, converted only
+at the display edge in `Formatter` — is fully preserved, because there is exactly one unit per
+sensor type and nothing converts anywhere else. Record it as an ADR when the code lands.
+
+### Phasing
+
+1. **Foundation** — `:core` model, Room table and migration, repository read/write, GPX
+   `gpxtpx:hr` reading, and Trailog's own GPX writing so a recorded activity still round-trips.
+   This is all M2.2 needs. **Do this first.**
+2. **Producers** — BLE heart-rate straps (GATT service `0x180D`, characteristic `0x2A37`, one of
+   the most rigidly standardised profiles in Bluetooth), wired into the existing foreground
+   service. Promoted from the backlog. Needs `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT`.
+3. **Display** — a live row on the Sensors screen, and heart rate as a chart profile on Activity
+   detail alongside elevation and speed.
+
+### Not doing: step counting
+
+Android would make it easy — `Sensor.TYPE_STEP_COUNTER` is hardware-fused and nearly free to read,
+needing only `ACTIVITY_RECOGNITION`; no accelerometer maths is involved. It is skipped because the
+data is not worth having. Of 1,263 exported workouts carrying a step count, roughly 780 are cycling,
+mountain biking or downhill skiing — a phone pedometer counting vibration. Only running, walking and
+hiking produce a meaningful figure, and step counting is what a phone's health app already does.
+Trailog's value is accurate GPS-derived statistics.
+
+**Imported summary figures are a different category and are not stored.** A workout's total step
+count, or an avg/max heart rate from the source app, is a third-party derived figure Trailog can
+never recompute or verify — it cuts directly against "every statistic is a recomputable view over
+raw data". Per-point samples have no such problem; totals do. Imported activities keep what they
+can prove.
 
 ---
 
