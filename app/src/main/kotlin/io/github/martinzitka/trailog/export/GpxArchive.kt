@@ -65,6 +65,11 @@ object GpxArchive {
                     val gpx = Gpx.write(
                         GpxTrack(
                             name = activity.name.ifBlank { null },
+                            // The domain Activity carries no notes — the column exists in the
+                            // database and Activity detail edits it, but loadActivity does not
+                            // read it, so the exporter has nothing to write here. Notes are
+                            // therefore absent from exported GPX; see the note in the plan.
+                            description = null,
                             type = activity.type.name.lowercase(),
                             points = activity.points,
                         ),

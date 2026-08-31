@@ -142,6 +142,10 @@ class ActivityDetailViewModel(
         Gpx.write(
             GpxTrack(
                 name = activity.name.ifBlank { null },
+                // Null for the same reason as in GpxArchive: the domain Activity has no notes
+                // field, so there is nothing to write. Not a decision that notes should be
+                // omitted — a gap, recorded in the plan rather than hidden here.
+                description = null,
                 type = activity.type.name.lowercase(),
                 points = activity.points,
             ),
