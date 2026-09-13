@@ -72,6 +72,7 @@ object GpxArchive {
                             description = null,
                             type = activity.type.name.lowercase(),
                             points = activity.points,
+                            samples = activity.samples,
                         ),
                     )
                     val entry = ZipEntry(

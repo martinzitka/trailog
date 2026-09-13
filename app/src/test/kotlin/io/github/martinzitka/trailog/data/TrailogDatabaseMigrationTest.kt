@@ -18,14 +18,16 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Migration 1 → 2 test. The developer's device carries real, irreplaceable recordings, so the
- * upgrade must be non-destructive: every raw point written under M1.3's version-1 schema has to
- * survive, and each recorded activity must be backfilled into the new `activities` table.
+ * Migration tests. The developer's device carries real, irreplaceable recordings, so every upgrade
+ * must be non-destructive: each raw point written under an older schema has to survive, and nothing
+ * already recorded may be lost or rewritten on the way up.
  *
- * Rather than Room's instrumentation-only `MigrationTestHelper`, this builds the version-1
- * database by hand from the M1.3 schema (unchanged in v2) and opens it through Room with the
- * real migration under Robolectric — so it runs on CI without an emulator, and Room's own
- * post-migration schema validation still fires (an incorrect migration throws on open).
+ * Rather than Room's instrumentation-only `MigrationTestHelper`, these build the old database by
+ * hand from the schema of the day and open it through Room with the real migrations under
+ * Robolectric — so they run on CI without an emulator, and Room's own post-migration schema
+ * validation still fires (an incorrect migration throws on open).
+ *
+ * The 1 → 2 case also covers 1 → 3, since Room applies the chain.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -49,7 +51,7 @@ class TrailogDatabaseMigrationTest {
         createVersion1Database()
 
         val db = Room.databaseBuilder(context, TrailogDatabase::class.java, dbName)
-            .addMigrations(TrailogDatabase.MIGRATION_1_2)
+            .addMigrations(TrailogDatabase.MIGRATION_1_2, TrailogDatabase.MIGRATION_2_3)
             .build()
         try {
             // Raw points are sacred: every fix recorded under v1 survives the upgrade untouched.
@@ -76,6 +78,33 @@ class TrailogDatabaseMigrationTest {
             assertNotNull(stats)
             assertEquals(2, stats!!.segmentCount)
             assertEquals(3, stats.pointCount)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun migrate2To3_addsAnEmptySensorTable_andLeavesEverythingElseAlone() = runTest {
+        createVersion2Database()
+
+        val db = Room.databaseBuilder(context, TrailogDatabase::class.java, dbName)
+            .addMigrations(TrailogDatabase.MIGRATION_1_2, TrailogDatabase.MIGRATION_2_3)
+            .build()
+        try {
+            // Purely additive: the fixes and the activity recorded under v2 are untouched.
+            assertEquals(2, db.rawPointDao().countFor(RIDE))
+            assertNotNull(db.activityDao().byId(RIDE))
+            assertEquals("CYCLING", db.activityDao().byId(RIDE)!!.type)
+
+            // The new table exists and starts empty — no activity recorded before v3 carries a
+            // sensor reading anywhere, so there is nothing to backfill it from.
+            assertEquals(0, db.sensorSampleDao().countFor(RIDE))
+
+            // And it is writable straight away, against the activity that was already there.
+            db.sensorSampleDao().insert(
+                SensorSampleEntity(activityId = RIDE, time = 1_500, type = "HEART_RATE", value = 142.0),
+            )
+            assertEquals(1, db.sensorSampleDao().countFor(RIDE))
         } finally {
             db.close()
         }
@@ -108,6 +137,35 @@ class TrailogDatabaseMigrationTest {
         helper.close()
     }
 
+    /** Builds the version-2 schema — the M1.4 shape, with `activities` and `activity_stats`. */
+    private fun createVersion2Database() {
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(dbName)
+                .callback(object : SupportSQLiteOpenHelper.Callback(2) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        db.execSQL(RAW_POINTS_V1)
+                        db.execSQL(RAW_POINTS_INDEX_V1)
+                        db.execSQL(RECORDING_SESSIONS_V1)
+                        db.execSQL(ACTIVITIES_V2)
+                        db.execSQL(ACTIVITY_STATS_V2)
+                    }
+
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build(),
+        )
+        helper.writableDatabase.use { db ->
+            db.execSQL(
+                "INSERT INTO activities (id, type, name, notes, startTime, createdAt, updatedAt) " +
+                    "VALUES ('$RIDE', 'CYCLING', 'Morning ride', NULL, 1000, 1000, 1000)",
+            )
+            db.execSQL(insertPoint(RIDE, 0, 1_000))
+            db.execSQL(insertPoint(RIDE, 0, 2_000))
+        }
+        helper.close()
+    }
+
     private fun insertPoint(activityId: String, segment: Int, time: Long): String =
         "INSERT INTO raw_points " +
             "(activityId, segmentIndex, time, recordedAt, latitude, longitude, altitude, accuracy, speed, bearing, pressure) " +
@@ -133,5 +191,22 @@ class TrailogDatabaseMigrationTest {
                 "(`activityId` TEXT NOT NULL, `type` TEXT NOT NULL, `state` TEXT NOT NULL, " +
                 "`startTime` INTEGER NOT NULL, `currentSegmentIndex` INTEGER NOT NULL, " +
                 "`heartbeat` INTEGER, PRIMARY KEY(`activityId`))"
+
+        // The version-2 tables exactly as the 1 → 2 migration and Room generated them.
+        const val ACTIVITIES_V2 =
+            "CREATE TABLE IF NOT EXISTS `activities` " +
+                "(`id` TEXT NOT NULL, `type` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                "`notes` TEXT, `startTime` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+        const val ACTIVITY_STATS_V2 =
+            "CREATE TABLE IF NOT EXISTS `activity_stats` " +
+                "(`activityId` TEXT NOT NULL, `distance` REAL NOT NULL, " +
+                "`elapsedTime` INTEGER NOT NULL, `movingTime` INTEGER NOT NULL, " +
+                "`averageSpeed` REAL NOT NULL, `maxSpeed` REAL NOT NULL, " +
+                "`elevationGain` REAL NOT NULL, `elevationLoss` REAL NOT NULL, " +
+                "`segmentCount` INTEGER NOT NULL, `pointCount` INTEGER NOT NULL, " +
+                "`computedAt` INTEGER NOT NULL, PRIMARY KEY(`activityId`), " +
+                "FOREIGN KEY(`activityId`) REFERENCES `activities`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE)"
     }
 }

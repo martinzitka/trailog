@@ -4,6 +4,8 @@ import io.github.martinzitka.trailog.core.gpx.Gpx
 import io.github.martinzitka.trailog.core.model.Activity
 import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.core.model.RawPoint
+import io.github.martinzitka.trailog.core.model.SensorSample
+import io.github.martinzitka.trailog.core.model.SensorType
 import io.github.martinzitka.trailog.data.ActivityRef
 import io.github.martinzitka.trailog.ui.format.Formatter
 import kotlinx.coroutines.runBlocking
@@ -62,6 +64,30 @@ class GpxArchiveTest {
         assertEquals(2, Regex("<trkseg>").findAll(gpx).count())
         // And it is real GPX, read back by the one reader in the project — with the gap intact.
         assertEquals(2, Gpx.read(gpx).single().segments().size)
+    }
+
+    @Test fun `sensor samples reach the archive and read back exactly`() = runTest {
+        // The reading at 900 s falls between the two segments, where no track point can carry it.
+        // It survives the round trip only because the exporter writes Trailog's own stream.
+        val samples = listOf(
+            SensorSample(Instant.fromEpochSeconds(0), SensorType.HEART_RATE, 142.0),
+            SensorSample(Instant.fromEpochSeconds(900), SensorType.HEART_RATE, 138.0),
+        )
+        val out = ByteArrayOutputStream()
+        GpxArchive.write(
+            sink = out,
+            refs = listOf(ref("a", DAY)),
+            load = {
+                activity(
+                    it,
+                    points = ride(segment = 0) + ride(segment = 1, startSecond = 1_800),
+                    samples = samples,
+                )
+            },
+            name = ::nameOf,
+        )
+
+        assertEquals(samples, Gpx.read(entries(out).values.single()).single().samples)
     }
 
     @Test fun `rides that would collide on name are kept apart`() = runTest {
@@ -154,11 +180,13 @@ class GpxArchiveTest {
         id: String,
         name: String = "Ride $id",
         points: List<RawPoint> = ride(),
+        samples: List<SensorSample> = emptyList(),
     ) = Activity(
         id = UUID.nameUUIDFromBytes(id.toByteArray()),
         type = ActivityType.CYCLING,
         name = name,
         points = points,
+        samples = samples,
     )
 
     private fun ride(count: Int = 10, segment: Int = 0, startSecond: Long = 0) =

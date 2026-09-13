@@ -8,8 +8,9 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
- * The app's Room database. Holds raw points (written on arrival), the single recording session,
- * activity metadata, and a derived statistics cache. `PRAGMA synchronous = FULL` is set on open:
+ * The app's Room database. Holds raw points (written on arrival), sensor samples (a stream of their
+ * own, on the track's clock), the single recording session, activity metadata, and a derived
+ * statistics cache. `PRAGMA synchronous = FULL` is set on open:
  * at 1 Hz the write volume is negligible and durability is the whole point (CLAUDE.md), so
  * recently committed fixes must survive power loss rather than sit in the WAL.
  *
@@ -23,8 +24,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RecordingSessionEntity::class,
         ActivityEntity::class,
         ActivityStatsEntity::class,
+        SensorSampleEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class TrailogDatabase : RoomDatabase() {
@@ -33,6 +35,7 @@ abstract class TrailogDatabase : RoomDatabase() {
     abstract fun recordingSessionDao(): RecordingSessionDao
     abstract fun activityDao(): ActivityDao
     abstract fun activityStatsDao(): ActivityStatsDao
+    abstract fun sensorSampleDao(): SensorSampleDao
 
     companion object {
         @Volatile
@@ -79,6 +82,32 @@ abstract class TrailogDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration 2 → 3: introduce the `sensor_samples` table. Purely additive — no existing
+         * table is touched, so every raw point and every activity survives untouched, and a device
+         * upgrading from version 2 simply gains an empty table.
+         *
+         * Nothing is backfilled, because there is nothing to backfill from: no activity recorded
+         * before this version carries a sensor reading anywhere. Imported activities get theirs
+         * from the file they came out of, on the import's first pass.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sensor_samples` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`activityId` TEXT NOT NULL, `time` INTEGER NOT NULL, " +
+                        "`type` TEXT NOT NULL, `value` REAL NOT NULL, " +
+                        "FOREIGN KEY(`activityId`) REFERENCES `activities`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_sensor_samples_activityId_time` " +
+                        "ON `sensor_samples` (`activityId`, `time`)",
+                )
+            }
+        }
+
         fun get(context: Context): TrailogDatabase =
             instance ?: synchronized(this) {
                 instance ?: build(context.applicationContext).also { instance = it }
@@ -86,7 +115,7 @@ abstract class TrailogDatabase : RoomDatabase() {
 
         private fun build(context: Context): TrailogDatabase =
             Room.databaseBuilder(context, TrailogDatabase::class.java, "trailog.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {
                         // Durability beats throughput at 1 Hz (CLAUDE.md).
