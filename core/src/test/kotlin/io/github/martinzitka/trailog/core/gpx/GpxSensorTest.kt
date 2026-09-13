@@ -42,7 +42,7 @@ class GpxSensorTest {
     @Test
     fun `heart rate on a foreign file's track points becomes a sample stream`() {
         // The shape Sports Tracker and Garmin both write: readings hang off the trkpt, so each
-        // one takes that fix's timestamp. Nine of the exported workouts look exactly like this.
+        // one takes that fix's timestamp. Real exported workouts look exactly like this.
         val xml = """
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"
                  xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">

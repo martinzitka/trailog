@@ -12,7 +12,7 @@ app's own egress; nothing here relaxes that.
 CLAUDE.md is unambiguous: "Adding any network call to a domain the user does not control requires
 explicit discussion first. This is the single most important rule in this file." M2.1 requires
 calling `api.sports-tracker.com`, a domain the user very much does not control, in order to
-retrieve nine years of their own recorded rides. This ADR is that discussion.
+retrieve years of their own recorded rides. This ADR is that discussion.
 
 The rule exists to stop the user's location history reaching a third party. The scraper runs in the
 opposite direction: it takes location history *out* of a third party that already holds it, on the
@@ -91,11 +91,11 @@ Both endpoints turned out to work — HTTP 200 with a genuine body of the reques
 time, from a route community scripts described in 2016. So the question was never whether FIT was
 *available*, only whether it was *worth* anything. Three independent lines of evidence say no:
 
-**The GPX carries nothing.** 5,276 track points, zero extension elements. Sports Tracker's
+**The GPX carries nothing.** Thousands of track points, zero extension elements. Sports Tracker's
 exporter declares the Garmin `TrackPointExtension` namespace on the root element — it is capable
 of writing heart rate — and wrote none.
 
-**The FIT body is too small to hold any.** 111,475 bytes of data across 5,276 records is 21.1
+**The FIT body is too small to hold any.** The FIT data works out at 21.1
 bytes per record, which is precisely a record of timestamp, latitude, longitude, altitude,
 distance and speed with no sensor fields. Adding heart rate alone would need 22 bytes per record,
 or 116,072 bytes — more than the file actually contains. This is arithmetic on the header's own
@@ -107,22 +107,22 @@ entered sessions such as a swim, which carry no track at all — only a distance
 
 ### Corrected 2026-08-31, after the full workout list was fetched
 
-The claim above is *almost* right and was stated too strongly. Of 1,557 workouts, **nine do carry
-heart rate**: eight runs from 2013–2016 and one mountain-bike ride from 2020, with genuine avg and
-max values between 134 and 162 bpm. Cadence is zero across all 1,557 without exception.
+The claim above is *almost* right and was stated too strongly. A small number of workouts **do
+carry heart rate** — some runs and one mountain-bike ride, with genuine avg and max values in a
+plausible range. Cadence is zero throughout, without exception.
 
 The decision does not change, for reasons that are stronger than the original ones:
 
-- Nine workouts is 0.6% of the history, and a FIT decoder cannot be justified by them.
+- They are well under one percent of the history, and a FIT decoder cannot be justified by them.
 - Their **avg and max heart rate are already preserved** in the workout-list JSON, which this tool
   saves verbatim. Whatever happens to the per-point data, the summary survives.
 - `:core`'s `RawPoint` has no heart-rate field. Preserving *per-point* HR would mean changing the
-  domain model, the Room schema and the sync DTOs for nine activities recorded a decade ago.
+  domain model, the Room schema and the sync DTOs for a handful of activities recorded long ago.
 
 ### Closed on the merits, same day
 
-One of the nine was probed. **GPX carries per-point heart rate whenever there is any to carry**:
-1,130 track points, 1,130 `<extensions>` elements, 1,130 heart-rate values. That is why the
+One of them was probed. **GPX carries per-point heart rate whenever there is any to carry**: one
+`<extensions>` element and one heart-rate value for every single track point. That is why the
 exporter declares the Garmin extension namespace on every file — it writes the elements when the
 data exists, and this account's other workouts simply have none.
 

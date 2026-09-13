@@ -251,7 +251,7 @@ coordinate does not identify a moment.
 - [ ] Touching or dragging the elevation or speed chart marks the corresponding position
       on the map.
 - [ ] Selecting a position on the map marks the corresponding point on both charts.
-- [ ] Remains responsive on a track of ~15,000 points.
+- [ ] Remains responsive on a long track (several hours at 1 Hz).
 
 ### M1.6 Maps
 - MapLibre Native Android.
@@ -315,16 +315,15 @@ Lives in `tools/sports-tracker-export/`, clearly marked disposable.
   HTTP 200 with a genuine body of the requested format. The community sources were right, and
   the 2016-era route still works.
 - **FIT was dropped, and the question is closed.** It was only ever preferable for carrying heart
-  rate and cadence natively. The probed workout has none: its GPX contains 5,276 track points
-  and **zero** extension elements, and the FIT body is far too small to hold per-point sensor
-  data — 111,475 bytes over 5,276 records is 21.1 bytes each, which is exactly a record of
-  timestamp, latitude, longitude, altitude, distance and speed. Adding heart rate alone would
-  need 116,072 bytes, more than the file contains.
-- **Corrected 2026-08-31 against the full list of 1,557 workouts.** Nine *do* carry heart rate —
-  eight runs from 2013–2016 and one MTB ride from 2020, 134–162 bpm. Cadence is zero across all
-  1,557. FIT stays dropped: nine workouts is 0.6% of the history, their avg and max HR are already
-  preserved in the workout-list JSON, and `RawPoint` has no heart-rate field to put per-point data
-  in anyway. Do not repeat the original overstatement that the history carries none.
+  rate and cadence natively. The probed workout has none: **zero** extension elements in its GPX,
+  and a FIT body far too small to hold per-point sensor data — it works out at 21.1 bytes per
+  record, which is exactly a record of timestamp, latitude, longitude, altitude, distance and
+  speed. Adding heart rate alone would need more bytes than the file contains.
+- **Corrected 2026-08-31 against the full workout list.** A small number *do* carry heart rate —
+  some runs and one MTB ride. Cadence is zero throughout. FIT stays dropped: they are well under
+  one percent of the history, their avg and max HR are already preserved in the workout-list JSON,
+  and `RawPoint` has no heart-rate field to put per-point data in anyway. Do not repeat the
+  original overstatement that the history carries none.
 - **Consequence: GPX is the migration format.** No FIT decoder is written, `:core` gains no new
   dependency, and FIT leaves the plan — see M1.2 and ADR 0022.
 - **Manually entered workouts have no track.** Their distance and duration exist only in the
@@ -332,8 +331,9 @@ Lives in `tools/sports-tracker-export/`, clearly marked disposable.
   case the importer must handle, not a failure.
 - Expect breakage without notice. Not a maintained feature.
 
-**Export completed 2026-08-31: 1,555 of 1,557 files, 1,549 of them intact.** Verified by the
-tool's own `verify` subcommand, which audits the archive offline against the saved workout list.
+**Export completed 2026-08-31**, with all but a couple of files retrieved and the great majority
+intact. Verified by the tool's own `verify` subcommand, which audits the archive offline against
+the saved workout list.
 
 **Format validity is not proof of content, and assuming it was hid real damage.** `fetch` accepted
 every body that sniffed as GPX — correctly, they *were* GPX — including four exports carrying a
@@ -363,7 +363,7 @@ track-less activities, exactly like the manual swims: honestly summary-only beat
 
 ### M2.2 Import CLI (`:tools:importer`)
 
-> **M2.3's foundation slice is done** (2026-09-13), as scheduled. Nine exported workouts carry
+> **M2.3's foundation slice is done** (2026-09-13), as scheduled. Some exported workouts carry
 > per-point heart rate, and the importer must write complete rows on its first pass — the dedupe
 > rule means a later re-run skips existing activities instead of backfilling them. The importer can
 > now read a GPX's heart rate through `:core` and write it with the activity. See M2.3 below.
@@ -434,7 +434,7 @@ failing.
 
 ## M2.3 Sensor sample stream
 
-**Decided 2026-08-31, and scheduled *before* M2.2 deliberately.** Nine of the exported Sports
+**Decided 2026-08-31, and scheduled *before* M2.2 deliberately.** Some of the exported Sports
 Tracker workouts carry per-point heart rate, and the importer should write complete rows on its
 first pass. The alternative — import now, backfill later — is worse than it looks: the importer
 deduplicates, so a re-run *skips* existing activities rather than filling in what was missing, and
@@ -492,8 +492,8 @@ sensor type and nothing converts anywhere else. Recorded as
 
 Android would make it easy — `Sensor.TYPE_STEP_COUNTER` is hardware-fused and nearly free to read,
 needing only `ACTIVITY_RECOGNITION`; no accelerometer maths is involved. It is skipped because the
-data is not worth having. Of 1,263 exported workouts carrying a step count, roughly 780 are cycling,
-mountain biking or downhill skiing — a phone pedometer counting vibration. Only running, walking and
+data is not worth having. Of the exported workouts carrying a step count, well over half are
+cycling, mountain biking or downhill skiing — a phone pedometer counting vibration. Only running, walking and
 hiking produce a meaningful figure, and step counting is what a phone's health app already does.
 Trailog's value is accurate GPS-derived statistics.
 

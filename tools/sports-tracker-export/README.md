@@ -104,7 +104,7 @@ recomputed. It also means a workout deleted upstream survives in an earlier arch
 
 Downloads pause a random 3–10 seconds by default (`--min-delay` / `--max-delay`). A fixed interval
 is both ruder and more conspicuous than a varying one: it draws a metronome in someone else's
-access logs. At that spacing a full 1,557-workout run takes roughly two and a half hours, which
+access logs. At that spacing a full run over a long history takes a few hours, which
 costs nothing when the job is resumable and nobody is waiting on it.
 
 The same launcher is generated without the `.bat` extension for POSIX shells.
@@ -123,7 +123,7 @@ A workout key is the identifier in a workout's own URL in the Sports Tracker web
 
 **Both endpoints work. FIT is dropped anyway; fetch GPX.**
 
-GPX and FIT both returned HTTP 200 with a genuine body. But the probed workout's GPX has 5,276
+GPX and FIT both returned HTTP 200 with a genuine body. But the probed workout's GPX has thousands of
 track points and zero extension elements, and its FIT body is arithmetically too small to hold
 per-point sensor data — 21.1 bytes per record, exactly a no-sensor record, where heart rate alone
 would need more bytes than the file contains. The developer confirms the history is plain GPS
