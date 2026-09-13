@@ -2,6 +2,7 @@ package io.github.martinzitka.trailog.core.gpx
 
 import io.github.martinzitka.trailog.core.model.RawPoint
 import io.github.martinzitka.trailog.core.model.Segment
+import io.github.martinzitka.trailog.core.model.SensorSample
 
 /**
  * One `<trk>` from a GPX file: its optional name, description and type, and its points with a
@@ -22,12 +23,17 @@ import io.github.martinzitka.trailog.core.model.Segment
  * @property description the track's `<desc>`, or null if absent.
  * @property type the track's `<type>` as free text (e.g. "cycling"), or null if absent.
  * @property points every `<trkpt>` in file order, each tagged with its segment ordinal.
+ * @property samples the track's sensor readings — heart rate and its kin — as their own
+ *   timestamped stream. Read from Trailog's own extension when the file has one, and otherwise
+ *   from the per-point `gpxtpx:` elements a foreign file carries, in which case each sample takes
+ *   the timestamp of the `<trkpt>` that held it. Empty for a file with no sensor data at all.
  */
 data class GpxTrack(
     val name: String?,
     val description: String?,
     val type: String?,
     val points: List<RawPoint>,
+    val samples: List<SensorSample> = emptyList(),
 ) {
     /**
      * The track's points read as ordered, de-duplicated [Segment]s — the same view the rest of

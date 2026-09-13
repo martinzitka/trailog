@@ -3,6 +3,7 @@ package io.github.martinzitka.trailog.data
 import androidx.room.withTransaction
 import io.github.martinzitka.trailog.core.model.Activity
 import io.github.martinzitka.trailog.core.model.ActivityType
+import io.github.martinzitka.trailog.core.model.SensorSample
 import io.github.martinzitka.trailog.core.stats.Statistics
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
@@ -24,6 +25,7 @@ class ActivityRepository(
     private val points: RawPointDao,
     private val stats: ActivityStatsDao,
     private val sessions: RecordingSessionDao,
+    private val samples: SensorSampleDao,
     private val now: () -> Long,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
@@ -32,6 +34,7 @@ class ActivityRepository(
         points = db.rawPointDao(),
         stats = db.activityStatsDao(),
         sessions = db.recordingSessionDao(),
+        samples = db.sensorSampleDao(),
         now = now,
         inTransaction = { block -> db.withTransaction(block) },
     )
@@ -91,9 +94,9 @@ class ActivityRepository(
     }
 
     /**
-     * Delete an activity outright: its metadata, its cached statistics, **its raw points**, and
-     * any recording session row that still points at it. Returns false and touches nothing when
-     * no such activity exists.
+     * Delete an activity outright: its metadata, its cached statistics, **its raw points**, its
+     * sensor samples, and any recording session row that still points at it. Returns false and
+     * touches nothing when no such activity exists.
      *
      * This is the one path that removes raw points, and only ever at the user's explicit request
      * (the detail screen confirms first). "Raw points are immutable and sacred" binds the app, not
@@ -111,8 +114,9 @@ class ActivityRepository(
     suspend fun delete(activityId: String): Boolean {
         if (activities.byId(activityId) == null) return false
         inTransaction {
-            // Stats cascade from the activity row's foreign key; points have no FK and go first
-            // so no window exists where the activity is gone but its coordinates remain.
+            // Stats and sensor samples cascade from the activity row's foreign key; points have
+            // no FK and go first, so no window exists where the activity is gone but its
+            // coordinates remain.
             points.deleteFor(activityId)
             sessions.delete(activityId)
             activities.delete(activityId)
@@ -121,8 +125,8 @@ class ActivityRepository(
     }
 
     /**
-     * Load an activity as a platform-free domain [Activity] — its metadata plus every raw point
-     * in time order. Returns null when no such activity exists.
+     * Load an activity as a platform-free domain [Activity] — its metadata, every raw point in
+     * time order, and every sensor reading. Returns null when no such activity exists.
      *
      * This is the single place raw points are read into the domain, so the Record screen's live
      * stats, the detail screen, and [recompute] all segment and compute through the one `:core`
@@ -135,8 +139,27 @@ class ActivityRepository(
             type = ActivityType.valueOf(activity.type),
             name = activity.name,
             points = points.pointsFor(activityId).map { it.toDomain() },
+            samples = samples.samplesFor(activityId).mapNotNull { it.toDomainOrNull() },
         )
     }
+
+    /**
+     * Append sensor readings to an activity. Additive by design: this never replaces or edits what
+     * is already stored, because samples are raw data and as immutable as the fixes beside them.
+     *
+     * Written in one batch because the callers that have a whole stream in hand — an import, a
+     * restored session — have it all at once. The live recording path writes each reading through
+     * [SensorSampleDao.insert] as it arrives instead, so a crash costs at most the last one.
+     *
+     * No coordinates and no readings are logged here; nothing is logged here.
+     */
+    suspend fun addSamples(activityId: String, incoming: List<SensorSample>) {
+        if (incoming.isEmpty()) return
+        samples.insertAll(incoming.map { it.toEntity(activityId) })
+    }
+
+    /** How many sensor readings an activity holds. */
+    suspend fun sampleCount(activityId: String): Int = samples.countFor(activityId)
 
     /**
      * Recompute one activity's derived statistics from its raw points and overwrite the cache

@@ -2,6 +2,8 @@ package io.github.martinzitka.trailog.data
 
 import io.github.martinzitka.trailog.core.model.ActivityType
 import io.github.martinzitka.trailog.core.model.RawPoint
+import io.github.martinzitka.trailog.core.model.SensorSample
+import io.github.martinzitka.trailog.core.model.SensorType
 import io.github.martinzitka.trailog.core.recording.RecordingSession
 import io.github.martinzitka.trailog.core.recording.RecordingState
 import io.github.martinzitka.trailog.core.stats.ActivityStats
@@ -42,6 +44,24 @@ fun RawPoint.toEntity(activityId: String, recordedAt: Long): RawPointEntity =
         speed = speed,
         bearing = bearing,
         pressure = pressure,
+    )
+
+/**
+ * Rows whose [SensorSampleEntity.type] names a sensor this build does not know are dropped rather
+ * than crashing the read. That happens only after a downgrade, and losing one unknown stream beats
+ * making every activity that contains it unopenable.
+ */
+fun SensorSampleEntity.toDomainOrNull(): SensorSample? =
+    SensorType.byNameOrNull(type)?.let {
+        SensorSample(time = Instant.fromEpochMilliseconds(time), type = it, value = value)
+    }
+
+fun SensorSample.toEntity(activityId: String): SensorSampleEntity =
+    SensorSampleEntity(
+        activityId = activityId,
+        time = time.toEpochMilliseconds(),
+        type = type.name,
+        value = value,
     )
 
 fun RecordingSessionEntity.toDomain(): RecordingSession =
