@@ -21,6 +21,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import io.github.martinzitka.trailog.core.model.Activity
 import io.github.martinzitka.trailog.core.model.ActivityType
+import io.github.martinzitka.trailog.core.model.RawPoint
+import kotlinx.datetime.Instant
 import io.github.martinzitka.trailog.data.ActivityRef
 import io.github.martinzitka.trailog.ui.format.Formatter
 import io.github.martinzitka.trailog.ui.format.LocalFormatter
@@ -65,6 +67,12 @@ class SettingsScreenTest {
      * The export half of the screen. Defaults to an empty history, which is what most of these
      * tests want: the Data group renders and nothing runs.
      */
+    /**
+     * The import half. Defaults to a source that yields nothing, which is what most of these tests
+     * want: the row renders and nothing runs.
+     */
+    private fun importViewModel() = ImportViewModel(exists = { false }, write = {})
+
     private fun exportViewModel(
         refs: List<ActivityRef> = emptyList(),
     ) = ExportViewModel(
@@ -82,7 +90,7 @@ class SettingsScreenTest {
     // ---- the controls ----
 
     @Test fun `every setting is rendered with its current value`() {
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), onOpenMapData = {}) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), importViewModel(), onOpenMapData = {}) } }
 
         composeRule.onNodeWithText("Units").assertIsDisplayed()
         composeRule.onNodeWithText("Metric").assertIsSelected()
@@ -100,20 +108,20 @@ class SettingsScreenTest {
     @Test fun `the trail toggle warns that it only shows above zoom 14`() {
         // Without this the setting reads as broken: every map opens fitted to a whole route, well
         // below the zoom at which the archive has any path data to draw.
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), onOpenMapData = {}) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), importViewModel(), onOpenMapData = {}) } }
         composeRule.onNodeWithText("zoom 14", substring = true)
             .performScrollTo().assertIsDisplayed()
     }
 
     @Test fun `the units explanation says recordings are unaffected`() {
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), onOpenMapData = {}) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), importViewModel(), onOpenMapData = {}) } }
         composeRule.onNodeWithText("always stored in metric", substring = true)
             .performScrollTo().assertIsDisplayed()
     }
 
     @Test fun `picking a theme selects it and deselects the others`() {
         val settings = FakeAppSettings()
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(settings), exportViewModel(), onOpenMapData = {}) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(settings), exportViewModel(), importViewModel(), onOpenMapData = {}) } }
 
         composeRule.onNodeWithText("Dark").performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -124,7 +132,7 @@ class SettingsScreenTest {
 
     @Test fun `toggling keep-screen-on flips the switch and is stored`() {
         val settings = FakeAppSettings()
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(settings), exportViewModel(), onOpenMapData = {}) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(settings), exportViewModel(), importViewModel(), onOpenMapData = {}) } }
 
         composeRule.onNodeWithText("Keep screen on while recording").performScrollTo().performClick()
         composeRule.waitForIdle()
@@ -139,7 +147,7 @@ class SettingsScreenTest {
      */
     @Test fun `Material You is absent where the platform cannot honour it`() {
         composeRule.setContent {
-            TrailogTheme { SettingsScreen(viewModel(dynamicColourSupported = false), exportViewModel(), onOpenMapData = {}) }
+            TrailogTheme { SettingsScreen(viewModel(dynamicColourSupported = false), exportViewModel(), importViewModel(), onOpenMapData = {}) }
         }
         composeRule.onNodeWithText("Material You colours").assertDoesNotExist()
         // The rest of Appearance is still there.
@@ -150,7 +158,7 @@ class SettingsScreenTest {
         var opened = false
         composeRule.setContent {
             TrailogTheme {
-                SettingsScreen(viewModel(), exportViewModel(), onOpenMapData = { opened = true })
+                SettingsScreen(viewModel(), exportViewModel(), importViewModel(), onOpenMapData = { opened = true })
             }
         }
 
@@ -162,7 +170,7 @@ class SettingsScreenTest {
     // ---- the data group ----
 
     @Test fun `the data group offers an export of the whole history`() {
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), onOpenMapData = {}) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), importViewModel(), onOpenMapData = {}) } }
 
         composeRule.onNodeWithText("Data").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Export all activities").performScrollTo().assertIsDisplayed()
@@ -173,7 +181,7 @@ class SettingsScreenTest {
 
     @Test fun `a finished export says what it wrote`() {
         val vm = exportViewModel(refs = listOf(ActivityRef(id = "a", startTime = 1_000L)))
-        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), vm, onOpenMapData = {}) } }
+        composeRule.setContent { TrailogTheme { SettingsScreen(viewModel(), vm, importViewModel(), onOpenMapData = {}) } }
 
         vm.exportAll(
             openSink = { ByteArrayOutputStream() },
@@ -198,7 +206,7 @@ class SettingsScreenTest {
                 TrailogTheme {
                     val format = LocalFormatter.current
                     Text(format.distance(12_345.0))
-                    SettingsScreen(viewModel(settings), exportViewModel(), onOpenMapData = {})
+                    SettingsScreen(viewModel(settings), exportViewModel(), importViewModel(), onOpenMapData = {})
                 }
             }
         }
@@ -223,7 +231,7 @@ class SettingsScreenTest {
             CompositionLocalProvider(LocalShowTrails provides prefs.showTrails) {
                 TrailogTheme {
                     Text(if (LocalShowTrails.current) "trails drawn" else "trails hidden")
-                    SettingsScreen(viewModel(settings), exportViewModel(), onOpenMapData = {})
+                    SettingsScreen(viewModel(settings), exportViewModel(), importViewModel(), onOpenMapData = {})
                 }
             }
         }
@@ -254,7 +262,7 @@ class SettingsScreenTest {
                             Text("To settings")
                         }
                     }
-                    composable("settings") { SettingsScreen(vm, exportViewModel(), onOpenMapData = {}) }
+                    composable("settings") { SettingsScreen(vm, exportViewModel(), importViewModel(), onOpenMapData = {}) }
                 }
             }
         }
@@ -266,5 +274,101 @@ class SettingsScreenTest {
         composeRule.runOnUiThread { navController.popBackStack() }
         composeRule.onNodeWithText("To settings").assertIsDisplayed()
         composeRule.onNodeWithText("Units").assertDoesNotExist()
+    }
+
+    // ---- import -------------------------------------------------------------------------------
+
+    @Test fun `the Data group offers an import alongside the export`() {
+        composeRule.setContent {
+            TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), importViewModel(), onOpenMapData = {}) }
+        }
+
+        composeRule.onNodeWithText("Import activities").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Export all activities").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun `the import note promises nothing is overwritten`() {
+        // The reassurance that matters: re-running an import is safe, and edits made after the
+        // first run survive it.
+        composeRule.setContent {
+            TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), importViewModel(), onOpenMapData = {}) }
+        }
+
+        composeRule.onNodeWithText("Nothing is overwritten or deleted", substring = true)
+            .performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun `a finished import says what it added and what was already there`() {
+        val vm = ImportViewModel(exists = { true }, write = {})
+        composeRule.setContent {
+            TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), vm, onOpenMapData = {}) }
+        }
+
+        vm.importArchive { importArchiveOf("a", "b") }
+        // Waiting on a semantics node rather than the flow: fetching nodes pumps the looper, so
+        // this actually lets the import finish. A plain field read would not.
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithText("already here", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // "Already here" is the expected outcome of a second run, so it has to be on screen —
+        // reporting only "Added 0" would read as a failure.
+        composeRule.onNodeWithText("were already here", substring = true)
+            .performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun `an unreadable archive says so, and says nothing was changed`() {
+        val vm = ImportViewModel(exists = { false }, write = {})
+        composeRule.setContent {
+            TrailogTheme { SettingsScreen(viewModel(), exportViewModel(), vm, onOpenMapData = {}) }
+        }
+
+        vm.importArchive { null }
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithText("read that archive", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("Couldn’t read that archive", substring = true)
+            .performScrollTo().assertIsDisplayed()
+    }
+
+    /** A minimal valid archive, so the screen tests exercise the real reader rather than a stub. */
+    private fun importArchiveOf(vararg names: String): java.io.InputStream {
+        val out = java.io.ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(out).use { zip ->
+            names.forEachIndexed { index, name ->
+                zip.putNextEntry(java.util.zip.ZipEntry("$name.gpx"))
+                zip.write(
+                    io.github.martinzitka.trailog.core.gpx.Gpx.write(
+                        io.github.martinzitka.trailog.core.gpx.GpxTrack(
+                            name = "Ride",
+                            description = null,
+                            type = "cycling",
+                            points = listOf(
+                                RawPoint(
+                                    latitude = 50.0,
+                                    longitude = 14.0,
+                                    altitude = null,
+                                    accuracy = null,
+                                    time = Instant.fromEpochSeconds(index.toLong()),
+                                ),
+                                RawPoint(
+                                    latitude = 50.001,
+                                    longitude = 14.001,
+                                    altitude = null,
+                                    accuracy = null,
+                                    time = Instant.fromEpochSeconds(index + 1L),
+                                ),
+                            ),
+                            activityId = UUID.nameUUIDFromBytes(name.toByteArray()),
+                        ),
+                    ).toByteArray(Charsets.UTF_8),
+                )
+                zip.closeEntry()
+            }
+        }
+        return java.io.ByteArrayInputStream(out.toByteArray())
     }
 }

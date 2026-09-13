@@ -3,6 +3,7 @@ package io.github.martinzitka.trailog.data
 import androidx.room.withTransaction
 import io.github.martinzitka.trailog.core.model.Activity
 import io.github.martinzitka.trailog.core.model.ActivityType
+import io.github.martinzitka.trailog.core.model.RawPoint
 import io.github.martinzitka.trailog.core.model.SensorSample
 import io.github.martinzitka.trailog.core.stats.Statistics
 import kotlinx.coroutines.flow.Flow
@@ -160,6 +161,70 @@ class ActivityRepository(
 
     /** How many sensor readings an activity holds. */
     suspend fun sampleCount(activityId: String): Int = samples.countFor(activityId)
+
+    /** Whether an activity with this id is already stored — the import's de-duplication check. */
+    suspend fun exists(activityId: String): Boolean = activities.byId(activityId) != null
+
+    /**
+     * Write one imported activity: its metadata, every raw point, every sensor sample, and its
+     * computed statistics. Returns false and touches nothing when the id is already present.
+     *
+     * **Additive only.** An id that already exists is skipped rather than overwritten, because a
+     * re-import would otherwise silently discard the name, notes and type the user corrected after
+     * the first run — and those corrections are the whole reason a history gets imported once and
+     * then lived with.
+     *
+     * The whole activity goes in **one transaction**, so an interrupted import can never leave an
+     * activity without its points, or points belonging to no activity. That matters more here than
+     * anywhere else: an archive can hold years of riding, and a partial write in the middle of it
+     * would be both invisible and impossible to resume from correctly.
+     *
+     * Statistics are computed **inside** the same transaction from the points just written, through
+     * the one `:core` implementation. An imported ride's figures are therefore Trailog's own,
+     * recomputed from raw data, never the source app's claims — the same rule every recorded
+     * activity follows.
+     */
+    suspend fun importActivity(
+        id: String,
+        type: ActivityType,
+        name: String,
+        notes: String?,
+        startTime: Long,
+        points: List<RawPoint>,
+        incoming: List<SensorSample>,
+    ): Boolean {
+        if (exists(id)) return false
+        val at = now()
+        inTransaction {
+            activities.upsert(
+                ActivityEntity(
+                    id = id,
+                    type = type.name,
+                    name = name,
+                    notes = notes,
+                    startTime = startTime,
+                    createdAt = at,
+                    updatedAt = at,
+                ),
+            )
+            this.points.insertAll(points.map { it.toEntity(id, recordedAt = at) })
+            if (incoming.isNotEmpty()) {
+                samples.insertAll(incoming.map { it.toEntity(id) })
+            }
+            stats.upsert(
+                Statistics.compute(
+                    Activity(
+                        id = UUID.fromString(id),
+                        type = type,
+                        name = name,
+                        points = points,
+                        samples = incoming,
+                    ),
+                ).toEntity(id, at),
+            )
+        }
+        return true
+    }
 
     /**
      * Recompute one activity's derived statistics from its raw points and overwrite the cache
