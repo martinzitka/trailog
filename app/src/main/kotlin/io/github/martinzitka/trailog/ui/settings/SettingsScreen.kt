@@ -16,6 +16,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -67,11 +68,13 @@ import io.github.martinzitka.trailog.ui.format.UnitSystem
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     exportViewModel: ExportViewModel,
+    importViewModel: ImportViewModel,
     onOpenMapData: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val exportState by exportViewModel.uiState.collectAsStateWithLifecycle()
+    val importState by importViewModel.uiState.collectAsStateWithLifecycle()
 
     // Hoisted out of the composable scope so the launcher callback below can capture them: a
     // CompositionLocal cannot be read from inside a plain lambda.
@@ -88,6 +91,16 @@ fun SettingsScreen(
                 openSink = { context.contentResolver.openOutputStream(uri) },
                 entryName = { slug, startTime -> format.exportFileName(slug, startTime, "gpx") },
             )
+        }
+    }
+
+    // The user picks the archive; the app never goes looking for one. Backing out of the picker
+    // returns null, which is not a failure and leaves the row untouched.
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            importViewModel.importArchive { context.contentResolver.openInputStream(uri) }
         }
     }
 
@@ -190,6 +203,19 @@ fun SettingsScreen(
             )
             ExportStatus(exportState)
             Note(stringResource(R.string.settings_export_all_note))
+
+            ActionRow(
+                label = stringResource(R.string.settings_import_label),
+                body = stringResource(R.string.settings_import_body),
+                icon = Icons.Filled.FileUpload,
+                enabled = importState !is ImportUiState.Running,
+                // Zip MIME types are inconsistent across providers and some report a zip as
+                // octet-stream, so the filter is deliberately broad: a picker that hides the user's
+                // own archive is worse than one that shows a file they will not choose.
+                onClick = { importLauncher.launch(arrayOf(ZIP_MIME_TYPE, ANY_MIME_TYPE)) },
+            )
+            ImportStatus(importState)
+            Note(stringResource(R.string.settings_import_note))
         }
     }
 }
@@ -244,10 +270,67 @@ private fun ExportStatus(state: ExportUiState) {
     }
 }
 
+/**
+ * What the import is doing, or what it did.
+ *
+ * The finished state reports all three outcomes rather than just the additions, because "already
+ * here" is the *expected* result of running an import twice — showing only "added 0" would read as
+ * a failure when it is the feature working.
+ */
+@Composable
+private fun ImportStatus(state: ImportUiState) {
+    when (state) {
+        is ImportUiState.Idle -> Unit
+
+        is ImportUiState.Running -> Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.settings_import_running, state.done),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            // Always indeterminate: a streamed zip cannot say how many entries it holds without
+            // being read to the end first, so there is no honest denominator to draw.
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+
+        is ImportUiState.Done -> {
+            val report = state.report
+            if (report.total == 0) {
+                Note(stringResource(R.string.settings_import_empty))
+            } else {
+                Note(
+                    listOfNotNull(
+                        pluralStringResource(
+                            R.plurals.settings_import_done, report.imported, report.imported,
+                        ),
+                        report.skipped.takeIf { it > 0 }?.let {
+                            pluralStringResource(R.plurals.settings_import_skipped, it, it)
+                        },
+                        report.failed.takeIf { it > 0 }?.let {
+                            pluralStringResource(R.plurals.settings_import_failed_entries, it, it)
+                        },
+                    ).joinToString(" "),
+                )
+            }
+        }
+
+        is ImportUiState.Failed -> Note(
+            text = stringResource(R.string.settings_import_failed),
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
 /** The proposed name of the archive, before the date stamp the formatter appends. */
 private const val EXPORT_ARCHIVE_SLUG = "activities"
 
 private const val ZIP_MIME_TYPE = "application/zip"
+
+/** See the import row: some providers report a zip as an unhelpfully generic type. */
+private const val ANY_MIME_TYPE = "*/*"
 
 private val ThemeMode.labelRes: Int
     get() = when (this) {

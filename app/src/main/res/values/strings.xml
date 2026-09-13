@@ -318,6 +318,29 @@
     <string name="settings_export_failed">Couldn’t write the export file. Nothing on your device
         was changed.</string>
 
+    <string name="settings_import_label">Import activities</string>
+    <string name="settings_import_body">Read a zip of GPX files back in — a Trailog export, or one
+        made by the import tool.</string>
+    <string name="settings_import_note">Activities you already have are left exactly as they are,
+        including any names or notes you have changed. Nothing is overwritten or deleted, so running
+        an import twice is safe.</string>
+    <string name="settings_import_running">Imported %1$d so far…</string>
+    <plurals name="settings_import_done">
+        <item quantity="one">Added %d activity.</item>
+        <item quantity="other">Added %d activities.</item>
+    </plurals>
+    <plurals name="settings_import_skipped">
+        <item quantity="one">%d was already here.</item>
+        <item quantity="other">%d were already here.</item>
+    </plurals>
+    <plurals name="settings_import_failed_entries">
+        <item quantity="one">%d file couldn’t be read and was left out.</item>
+        <item quantity="other">%d files couldn’t be read and were left out.</item>
+    </plurals>
+    <string name="settings_import_empty">That archive held no activities.</string>
+    <string name="settings_import_failed">Couldn’t read that archive. Nothing on your device was
+        changed.</string>
+
     <!-- Map data: the region packs installed on the device. -->
     <string name="map_data_title">Map data</string>
     <string name="map_data_back">Back to settings</string>

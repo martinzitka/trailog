@@ -12,6 +12,18 @@ interface RawPointDao {
     @Insert
     suspend fun insert(point: RawPointEntity)
 
+    /**
+     * Persist a whole activity's fixes in one statement — the **import** path only.
+     *
+     * Recording never uses this, and must not: durability there means each fix reaching the disk as
+     * it arrives, so that a crash costs seconds rather than a session (CLAUDE.md). An import is the
+     * opposite situation. The points already exist in a file on disk, nothing is lost if the process
+     * dies mid-way, and inserting a long ride one row at a time would mean thousands of separate
+     * transactions against a database running `synchronous = FULL`.
+     */
+    @Insert
+    suspend fun insertAll(points: List<RawPointEntity>)
+
     @Query("SELECT COUNT(*) FROM raw_points")
     fun countFlow(): Flow<Int>
 

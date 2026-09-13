@@ -41,6 +41,7 @@ import io.github.martinzitka.trailog.ui.settings.PrefsAppSettings
 import io.github.martinzitka.trailog.ui.map.MapDataScreen
 import io.github.martinzitka.trailog.ui.map.MapDataViewModel
 import io.github.martinzitka.trailog.ui.settings.ExportViewModel
+import io.github.martinzitka.trailog.ui.settings.ImportViewModel
 import io.github.martinzitka.trailog.ui.settings.SettingsScreen
 import io.github.martinzitka.trailog.ui.settings.SettingsViewModel
 import io.github.martinzitka.trailog.ui.settings.ThemeMode
@@ -169,9 +170,13 @@ private fun TrailogNavigation() {
                 val exportViewModel: ExportViewModel = viewModel(
                     factory = ExportViewModel.Factory(context),
                 )
+                val importViewModel: ImportViewModel = viewModel(
+                    factory = ImportViewModel.Factory(context),
+                )
                 SettingsScreen(
                     viewModel = settingsViewModel,
                     exportViewModel = exportViewModel,
+                    importViewModel = importViewModel,
                     onOpenMapData = { navController.navigate(Routes.MAP_DATA) },
                     modifier = Modifier.fillMaxSize(),
                 )
