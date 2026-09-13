@@ -363,9 +363,10 @@ track-less activities, exactly like the manual swims: honestly summary-only beat
 
 ### M2.2 Import CLI (`:tools:importer`)
 
-> **Do M2.3's foundation slice first** (2026-08-31). Nine exported workouts carry per-point heart
-> rate, and the importer must write complete rows on its first pass — the dedupe rule means a later
-> re-run skips existing activities instead of backfilling them. See M2.3 below.
+> **M2.3's foundation slice is done** (2026-09-13), as scheduled. Nine exported workouts carry
+> per-point heart rate, and the importer must write complete rows on its first pass — the dedupe
+> rule means a later re-run skips existing activities instead of backfilling them. The importer can
+> now read a GPX's heart rate through `:core` and write it with the activity. See M2.3 below.
 
 Durable. A JVM CLI that uses `:core` for parsing, so there is exactly one GPX parser in the
 project.
@@ -466,13 +467,21 @@ The reason is not taste. BLE reports heart rate as an integer bpm, and 140 bpm i
 which does not round-trip: you get 139.99999 back. Storing hertz would *introduce* the precision
 loss the SI rule exists to prevent. The rule's purpose — exactly one unit per field, converted only
 at the display edge in `Formatter` — is fully preserved, because there is exactly one unit per
-sensor type and nothing converts anywhere else. Record it as an ADR when the code lands.
+sensor type and nothing converts anywhere else. Recorded as
+`docs/adr/0023-sensor-samples-are-a-stream-with-per-type-units.md`.
 
 ### Phasing
 
-1. **Foundation** — `:core` model, Room table and migration, repository read/write, GPX
-   `gpxtpx:hr` reading, and Trailog's own GPX writing so a recorded activity still round-trips.
-   This is all M2.2 needs. **Do this first.**
+1. **Foundation** — *done 2026-09-13.* `:core` gained `SensorSample`, `SensorType` with its own
+   unit per constant, and `SensorStream` for ordering, de-duplication and segment alignment;
+   `:app` gained the `sensor_samples` table, the non-destructive 2 → 3 migration and the
+   repository read/write path; `Gpx` reads `gpxtpx:hr` (and cadence, temperature, power) off
+   foreign track points and writes both Trailog's exact stream and a portable projection of it,
+   so a recorded activity round-trips losslessly and other tools can still read the data. This is
+   all M2.2 needs. See `docs/adr/0023-sensor-samples-are-a-stream-with-per-type-units.md`.
+
+   Not yet wired: nothing *produces* samples on the phone, so every recorded activity still has an
+   empty stream until phase 2. The import CLI is the first real writer.
 2. **Producers** — BLE heart-rate straps (GATT service `0x180D`, characteristic `0x2A37`, one of
    the most rigidly standardised profiles in Bluetooth), wired into the existing foreground
    service. Promoted from the backlog. Needs `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT`.
