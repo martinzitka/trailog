@@ -1,6 +1,9 @@
 package io.github.martinzitka.trailog.core.gpx
 
 import io.github.martinzitka.trailog.core.model.RawPoint
+import io.github.martinzitka.trailog.core.model.SensorSample
+import io.github.martinzitka.trailog.core.model.SensorStream
+import io.github.martinzitka.trailog.core.model.SensorType
 import kotlinx.datetime.Instant
 import org.xml.sax.Attributes
 import org.xml.sax.InputSource
@@ -9,6 +12,7 @@ import org.xml.sax.helpers.DefaultHandler
 import java.io.StringReader
 import java.math.BigDecimal
 import javax.xml.parsers.SAXParserFactory
+import kotlin.math.roundToLong
 
 /**
  * GPX 1.1 reading and writing for tracks. This is the *single* GPX implementation in the
@@ -34,6 +38,16 @@ import javax.xml.parsers.SAXParserFactory
  * another app (ele + time only, or foreign extensions like heart rate) parses fine, with the
  * absent fields left null.
  *
+ * **Sensor samples are a track-level stream, written twice on purpose.** Heart rate and its kin
+ * are their own timestamped stream rather than fields on a fix, and GPX has no place to express
+ * that: the standard `gpxtpx:` elements hang off a `<trkpt>`, so a reading taken during a signal
+ * blackout has nowhere to go, and a reading taken 0.4 s after a fix would have to be pretended
+ * simultaneous with it. So the writer emits both — the exact stream under [TRAILOG_NS], which is
+ * what the reader prefers and what makes a Trailog activity round-trip losslessly, and a lossy
+ * projection onto the nearest track point in Garmin's namespaces, so the file is portable to tools
+ * that have never heard of Trailog. Data portability is non-negotiable (CLAUDE.md), and a
+ * heart rate only Trailog can read is not portable. See `docs/adr/0023-sensor-sample-units.md`.
+ *
  * The reader is hardened against XXE — DTDs and external entities are disabled.
  */
 object Gpx {
@@ -43,6 +57,32 @@ object Gpx {
 
     private const val GPX_NS = "http://www.topografix.com/GPX/1/1"
     private const val DEFAULT_CREATOR = "Trailog"
+
+    /** Garmin's TrackPointExtension — the de facto standard for per-point hr, cadence and temp. */
+    private const val GPXTPX_NS = "http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
+
+    /** Garmin's PowerExtension. Separate from [GPXTPX_NS] because power is not in that schema. */
+    private const val GPXPX_NS = "http://www.garmin.com/xmlschemas/PowerExtension/v1"
+
+    /**
+     * Sensor types the standard extensions can express, and the element name each uses. Types
+     * absent here still round-trip through [TRAILOG_NS]; they simply have no portable form.
+     */
+    private val GARMIN_ELEMENT: Map<SensorType, String> = mapOf(
+        SensorType.HEART_RATE to "hr",
+        SensorType.CADENCE to "cad",
+        SensorType.TEMPERATURE to "atemp",
+        SensorType.POWER to "PowerInWatts",
+    )
+
+    /** Local element names the reader accepts as a sensor reading inside a `<trkpt>`. */
+    private val SENSOR_ELEMENT: Map<String, SensorType> = mapOf(
+        "hr" to SensorType.HEART_RATE,
+        "cad" to SensorType.CADENCE,
+        "atemp" to SensorType.TEMPERATURE,
+        "power" to SensorType.POWER,
+        "PowerInWatts" to SensorType.POWER,
+    )
 
     private val parserFactory: SAXParserFactory =
         SAXParserFactory.newInstance().apply {
@@ -126,6 +166,26 @@ object Gpx {
         private var inMetadata = false
 
         /**
+         * Sensor readings found on `<trkpt>` elements, and those found in Trailog's own track-level
+         * stream. Kept apart until `</trk>` because a Trailog file carries both — the stream is the
+         * truth and the per-point values are a projection of it — and merging them blindly would
+         * double every reading. Resolved per type in [takeSamples].
+         */
+        private var pointSamples = ArrayList<SensorSample>()
+        private var streamSamples = ArrayList<SensorSample>()
+
+        /** Sensor values seen on the `<trkpt>` currently open, emitted with its timestamp. */
+        private var pointSensors = LinkedHashMap<SensorType, Double>()
+
+        /**
+         * The type of the `<trailog:samples>` block currently open, or null when none is open —
+         * which also covers a block naming a sensor type this build does not know. An unknown type
+         * is skipped rather than rejected, so a file written by a later version still reads.
+         */
+        private var streamType: SensorType? = null
+        private var inSampleStream = false
+
+        /**
          * `<author>` nests its own `<name>` inside `<metadata>`. Without this guard the author's
          * name would overwrite the file's — Sports Tracker's export puts both in exactly that
          * order, so the last one written would win and every file would appear to be named after
@@ -158,6 +218,8 @@ object Gpx {
                     type = null
                     points = ArrayList()
                     segmentIndex = -1
+                    pointSamples = ArrayList()
+                    streamSamples = ArrayList()
                 }
                 "trkseg" -> segmentIndex++
                 "trkpt" -> {
@@ -168,6 +230,25 @@ object Gpx {
                     lon = requiredAttr(attributes, "lon")
                     ele = null; time = null
                     accuracy = null; speed = null; bearing = null; pressure = null
+                    pointSensors = LinkedHashMap()
+                }
+
+                // Trailog's own track-level sensor stream. Only meaningful inside a <trk> and
+                // outside a <trkpt>; a same-named element anywhere else is not this.
+                "samples" -> if (inTrack && !inPoint) {
+                    inSampleStream = true
+                    streamType = attr(attributes, "type")?.let { SensorType.byNameOrNull(it) }
+                }
+                "s" -> if (inSampleStream) {
+                    val sensor = streamType
+                    // Attributes rather than child elements: a two-hour ride is thousands of
+                    // samples, and this keeps the file to one short line each.
+                    val at = attr(attributes, "t") ?: fail("<trailog:s> is missing 't'")
+                    val raw = attr(attributes, "v") ?: fail("<trailog:s> is missing 'v'")
+                    val value = raw.toDoubleOrNull() ?: fail("<trailog:s> has a non-numeric 'v'")
+                    // Parsed before the type check so a malformed file fails the same way whether
+                    // or not this build happens to know the sensor.
+                    if (sensor != null) streamSamples.add(SensorSample(parseTime(at), sensor, value))
                 }
             }
         }
@@ -178,7 +259,19 @@ object Gpx {
 
         override fun endElement(uri: String?, localName: String?, qName: String?) {
             val value = text.toString().trim()
-            when (localOrQ(localName, qName)) {
+            val element = localOrQ(localName, qName)
+
+            // Sensor readings on a track point, in whatever namespace the producer chose. Matched
+            // by local name like everything else here, so gpxtpx:, ns3: and bare all read alike.
+            // Checked before the main table because `power` would otherwise need a branch there.
+            val sensor = SENSOR_ELEMENT[element]
+            if (sensor != null && inPoint) {
+                parseDouble(value)?.let { pointSensors[sensor] = it }
+                text.setLength(0)
+                return
+            }
+
+            when (element) {
                 // Track-level metadata, only when not inside a point. `<metadata>` sits outside
                 // any `<trk>`, so the two cases never collide; `<author><name>` is excluded
                 // explicitly because it nests inside `<metadata>`.
@@ -215,7 +308,15 @@ object Gpx {
                             segmentIndex = segmentIndex,
                         ),
                     )
+                    // A per-point reading has no timestamp of its own, so it takes the fix's.
+                    for ((kind, reading) in pointSensors) {
+                        pointSamples.add(SensorSample(t, kind, reading))
+                    }
                     inPoint = false
+                }
+                "samples" -> if (inSampleStream) {
+                    inSampleStream = false
+                    streamType = null
                 }
                 "trk" -> {
                     tracks.add(
@@ -224,6 +325,7 @@ object Gpx {
                             description = description,
                             type = type,
                             points = points,
+                            samples = takeSamples(),
                         ),
                     )
                     inTrack = false
@@ -234,9 +336,30 @@ object Gpx {
             text.setLength(0)
         }
 
+        /**
+         * The track's sensor stream, resolved per sensor type: where Trailog's own extension
+         * carried a type, that is authoritative and the per-point values for it are discarded as
+         * the lossy projection they are. Types the extension did not mention fall back to whatever
+         * the track points held, which is how a foreign file's heart rate is read.
+         *
+         * Per type rather than all-or-nothing so a file that mixes the two — Trailog's stream for
+         * one sensor, a foreign tool's per-point elements for another — loses neither.
+         */
+        private fun takeSamples(): List<SensorSample> {
+            if (streamSamples.isEmpty()) return SensorStream.normalise(pointSamples)
+            val covered = streamSamples.mapTo(HashSet()) { it.type }
+            return SensorStream.normalise(
+                streamSamples + pointSamples.filter { it.type !in covered },
+            )
+        }
+
         /** Prefer the namespace local name; fall back to the raw qName minus any prefix. */
         private fun localOrQ(localName: String?, qName: String?): String =
             if (!localName.isNullOrEmpty()) localName else (qName ?: "").substringAfterLast(':')
+
+        /** An unprefixed attribute, looked up by qName and then by empty-namespace local name. */
+        private fun attr(attributes: Attributes, name: String): String? =
+            attributes.getValue(name) ?: attributes.getValue("", name)
 
         private fun requiredAttr(attributes: Attributes, name: String): Double {
             val raw = attributes.getValue(name) ?: attributes.getValue("", name)
@@ -273,14 +396,30 @@ object Gpx {
      * [TRAILOG_NS]. The result is valid GPX that opens in any third-party tool.
      */
     fun write(tracks: List<GpxTrack>, creator: String = DEFAULT_CREATOR): String {
+        val allTypes = tracks.flatMap { SensorStream.typesIn(it.samples) }.toSet()
+
         val sb = StringBuilder()
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
         sb.append('\n')
         sb.append("<gpx version=\"1.1\" creator=\"").append(esc(creator)).append('"')
         sb.append(" xmlns=\"").append(GPX_NS).append('"')
-        sb.append(" xmlns:trailog=\"").append(TRAILOG_NS).append("\">")
+        sb.append(" xmlns:trailog=\"").append(TRAILOG_NS).append('"')
+        // Garmin's namespaces are declared only when something is actually written in them, so a
+        // file with no sensor data looks exactly as it did before sensors existed.
+        if (allTypes.any { it != SensorType.POWER }) {
+            sb.append(" xmlns:gpxtpx=\"").append(GPXTPX_NS).append('"')
+        }
+        if (SensorType.POWER in allTypes) {
+            sb.append(" xmlns:gpxpx=\"").append(GPXPX_NS).append('"')
+        }
+        sb.append('>')
 
         for (track in tracks) {
+            // One sorted list per sensor type, built once per track: the per-point projection
+            // below searches it for every fix, and rebuilding it each time would be quadratic.
+            val byType = SensorStream.typesIn(track.samples)
+                .associateWith { SensorStream.ofType(track.samples, it) }
+
             nl(sb, 1); sb.append("<trk>")
             if (track.name != null) {
                 nl(sb, 2); sb.append("<name>").append(esc(track.name)).append("</name>")
@@ -294,9 +433,10 @@ object Gpx {
             if (track.type != null) {
                 nl(sb, 2); sb.append("<type>").append(esc(track.type)).append("</type>")
             }
+            writeSampleStream(sb, byType)
             for (seg in track.points.groupBy { it.segmentIndex }.toSortedMap().values) {
                 nl(sb, 2); sb.append("<trkseg>")
-                for (p in seg.sortedBy { it.time }) writePoint(sb, p)
+                for (p in seg.sortedBy { it.time }) writePoint(sb, p, byType)
                 nl(sb, 2); sb.append("</trkseg>")
             }
             nl(sb, 1); sb.append("</trk>")
@@ -306,7 +446,34 @@ object Gpx {
         return sb.toString()
     }
 
-    private fun writePoint(sb: StringBuilder, p: RawPoint) {
+    /**
+     * The track's sensor readings, exactly as recorded, in Trailog's own namespace. This is the
+     * lossless copy — every sample with its own timestamp, including the ones taken while the GPS
+     * had nothing to report, which the per-point projection below cannot express at all.
+     *
+     * Sits in the `<trk>`'s `<extensions>`, which GPX 1.1 places after `<type>` and before the
+     * first `<trkseg>`.
+     */
+    private fun writeSampleStream(sb: StringBuilder, byType: Map<SensorType, List<SensorSample>>) {
+        if (byType.isEmpty()) return
+        nl(sb, 2); sb.append("<extensions>")
+        for ((type, samples) in byType) {
+            nl(sb, 3); sb.append("<trailog:samples type=\"").append(type.name).append("\">")
+            for (s in samples) {
+                nl(sb, 4)
+                sb.append("<trailog:s t=\"").append(s.time.toString())
+                    .append("\" v=\"").append(num(s.value)).append("\"/>")
+            }
+            nl(sb, 3); sb.append("</trailog:samples>")
+        }
+        nl(sb, 2); sb.append("</extensions>")
+    }
+
+    private fun writePoint(
+        sb: StringBuilder,
+        p: RawPoint,
+        byType: Map<SensorType, List<SensorSample>>,
+    ) {
         nl(sb, 3)
         sb.append("<trkpt lat=\"").append(num(p.latitude)).append("\" lon=\"").append(num(p.longitude)).append("\">")
         if (p.altitude != null) {
@@ -314,18 +481,60 @@ object Gpx {
         }
         nl(sb, 4); sb.append("<time>").append(p.time.toString()).append("</time>")
 
+        // The readings nearest this fix in time, within SensorStream.MATCH_TOLERANCE. Lossy by
+        // construction — a sample taken 0.4 s after the fix is reported as if simultaneous, and
+        // samples with no fix near them are not reported here at all. The authoritative copy is
+        // the track-level stream above; this exists so other tools can read the data.
+        val nearby = byType.mapNotNull { (type, samples) ->
+            SensorStream.nearestTo(samples, p.time)?.let { type to it.value }
+        }
+
         // Trailog extensions — only emitted for fields that are actually present.
-        if (p.accuracy != null || p.speed != null || p.bearing != null || p.pressure != null) {
+        val hasTrailog = p.accuracy != null || p.speed != null || p.bearing != null || p.pressure != null
+        if (hasTrailog || nearby.isNotEmpty()) {
             nl(sb, 4); sb.append("<extensions>")
             ext(sb, "accuracy", p.accuracy)
             ext(sb, "speed", p.speed)
             ext(sb, "bearing", p.bearing)
             ext(sb, "pressure", p.pressure)
+            writeGarminSensors(sb, nearby)
             nl(sb, 4); sb.append("</extensions>")
         }
 
         nl(sb, 3); sb.append("</trkpt>")
     }
+
+    /**
+     * The nearby readings in Garmin's namespaces: `hr`, `cad` and `atemp` inside a
+     * `<gpxtpx:TrackPointExtension>`, and power in its own `<gpxpx:PowerInWatts>` because Garmin
+     * never put it in the first schema.
+     *
+     * Heart rate, cadence and power are written as whole numbers: those elements are integer-typed
+     * in Garmin's schema, and `142.0` there is a file strict readers reject. No precision is lost —
+     * the sources are integral, and the exact value is in the Trailog stream regardless.
+     */
+    private fun writeGarminSensors(sb: StringBuilder, readings: List<Pair<SensorType, Double>>) {
+        if (readings.isEmpty()) return
+        val trackPoint = readings.filter { it.first != SensorType.POWER }
+        if (trackPoint.isNotEmpty()) {
+            nl(sb, 5); sb.append("<gpxtpx:TrackPointExtension>")
+            for ((type, value) in trackPoint) {
+                val element = GARMIN_ELEMENT.getValue(type)
+                val text = if (type == SensorType.TEMPERATURE) num(value) else rounded(value)
+                nl(sb, 6)
+                sb.append("<gpxtpx:").append(element).append('>').append(text)
+                    .append("</gpxtpx:").append(element).append('>')
+            }
+            nl(sb, 5); sb.append("</gpxtpx:TrackPointExtension>")
+        }
+        readings.firstOrNull { it.first == SensorType.POWER }?.let { (_, watts) ->
+            nl(sb, 5)
+            sb.append("<gpxpx:PowerInWatts>").append(rounded(watts)).append("</gpxpx:PowerInWatts>")
+        }
+    }
+
+    /** A whole-number rendering for the integer-typed Garmin elements. */
+    private fun rounded(value: Double): String = value.roundToLong().toString()
 
     private fun ext(sb: StringBuilder, name: String, value: Double?) {
         if (value == null) return
