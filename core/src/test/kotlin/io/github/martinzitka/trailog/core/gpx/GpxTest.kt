@@ -2,9 +2,11 @@ package io.github.martinzitka.trailog.core.gpx
 
 import io.github.martinzitka.trailog.core.model.RawPoint
 import kotlinx.datetime.Instant
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -284,5 +286,107 @@ class GpxTest {
             Gpx.write(GpxTrack(null, nasty, null, listOf(pt(0, 0, 50.0, 14.0)))),
         ).single()
         assertEquals(nasty, reparsed.description)
+    }
+
+    // ---- track identity -----------------------------------------------------------------------
+
+    @Test
+    fun `an activity id round-trips through the track extensions`() {
+        // What makes importing a file idempotent: the ride carries its own identity, so a re-import
+        // recognises it instead of duplicating it.
+        val id = UUID.fromString("019fdd0d-0000-7000-8000-0000000000a1")
+        val xml = Gpx.write(
+            GpxTrack("Ride", null, "cycling", listOf(pt(0, 0, 50.0, 14.0)), activityId = id),
+        )
+
+        assertTrue(xml.contains("<trailog:activityId>$id</trailog:activityId>"), xml)
+        assertEquals(id, Gpx.read(xml).single().activityId)
+    }
+
+    @Test
+    fun `a file with no activity id reads as null and writes no extensions block`() {
+        val xml = Gpx.write(GpxTrack("Ride", null, "cycling", listOf(pt(0, 0, 50.0, 14.0))))
+        assertFalse(xml.contains("<extensions>"), "nothing to put in one")
+        assertNull(Gpx.read(xml).single().activityId)
+    }
+
+    @Test
+    fun `an unreadable activity id is ignored rather than failing the file`() {
+        // Losing the id costs a duplicate on re-import; refusing the file costs the ride.
+        val xml = """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"
+                 xmlns:trailog="urn:trailog:gpx:v1">
+              <trk>
+                <extensions><trailog:activityId>not-a-uuid</trailog:activityId></extensions>
+                <trkseg>
+                  <trkpt lat="50.0" lon="14.0"><time>2026-08-03T18:00:00Z</time></trkpt>
+                </trkseg>
+              </trk>
+            </gpx>
+        """.trimIndent()
+
+        val track = Gpx.read(xml).single()
+        assertNull(track.activityId)
+        assertEquals(1, track.points.size)
+    }
+
+    @Test
+    fun `each track keeps its own id`() {
+        val a = UUID.fromString("019fdd0d-0000-7000-8000-0000000000a1")
+        val xml = Gpx.write(
+            listOf(
+                GpxTrack(null, null, null, listOf(pt(0, 0, 50.0, 14.0)), activityId = a),
+                GpxTrack(null, null, null, listOf(pt(10, 0, 51.0, 15.0))),
+            ),
+        )
+        val tracks = Gpx.read(xml)
+        assertEquals(a, tracks[0].activityId)
+        assertNull(tracks[1].activityId)
+    }
+
+    // ---- document time ------------------------------------------------------------------------
+
+    @Test
+    fun `a document time round-trips through metadata`() {
+        // The only place an activity with no track points can record when it happened.
+        val when_ = Instant.parse("2020-09-13T12:26:40Z")
+        val xml = Gpx.write(GpxTrack("Typed in", null, "swimming", emptyList()), time = when_)
+
+        assertTrue(xml.contains("<metadata>"), xml)
+        assertEquals(when_, Gpx.readDocument(xml).time)
+    }
+
+    @Test
+    fun `metadata time is written before the first trk, as GPX 1_1 requires`() {
+        val xml = Gpx.write(
+            GpxTrack("N", null, null, listOf(pt(0, 0, 50.0, 14.0))),
+            time = Instant.parse("2020-09-13T12:26:40Z"),
+        )
+        assertTrue(xml.indexOf("<metadata>") < xml.indexOf("<trk>"))
+    }
+
+    @Test
+    fun `no document time means no metadata element at all`() {
+        val xml = Gpx.write(GpxTrack("N", null, null, listOf(pt(0, 0, 50.0, 14.0))))
+        assertFalse(xml.contains("<metadata>"))
+        assertNull(Gpx.readDocument(xml).time)
+    }
+
+    @Test
+    fun `a metadata time never leaks into a track point's timestamp`() {
+        // `<time>` means two different things by position, and confusing them would stamp every
+        // fix in the file with the file's own date.
+        val xml = """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <metadata><time>2001-01-01T00:00:00Z</time></metadata>
+              <trk><trkseg>
+                <trkpt lat="50.0" lon="14.0"><time>2026-08-03T18:00:00Z</time></trkpt>
+              </trkseg></trk>
+            </gpx>
+        """.trimIndent()
+
+        val doc = Gpx.readDocument(xml)
+        assertEquals(Instant.parse("2001-01-01T00:00:00Z"), doc.time)
+        assertEquals(Instant.parse("2026-08-03T18:00:00Z"), doc.tracks.single().points.single().time)
     }
 }

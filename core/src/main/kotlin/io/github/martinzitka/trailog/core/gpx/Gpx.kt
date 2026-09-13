@@ -11,6 +11,7 @@ import org.xml.sax.SAXException
 import org.xml.sax.helpers.DefaultHandler
 import java.io.StringReader
 import java.math.BigDecimal
+import java.util.UUID
 import javax.xml.parsers.SAXParserFactory
 import kotlin.math.roundToLong
 
@@ -142,6 +143,7 @@ object Gpx {
             creator = handler.creator,
             name = handler.metadataName,
             description = handler.metadataDescription,
+            time = handler.metadataTime,
             tracks = handler.tracks,
         )
     }
@@ -155,10 +157,12 @@ object Gpx {
         var creator: String? = null
         var metadataName: String? = null
         var metadataDescription: String? = null
+        var metadataTime: Instant? = null
 
         private var name: String? = null
         private var description: String? = null
         private var type: String? = null
+        private var activityId: UUID? = null
         private var points = ArrayList<RawPoint>()
         private var segmentIndex = -1
         private var inTrack = false
@@ -218,6 +222,7 @@ object Gpx {
                     type = null
                     points = ArrayList()
                     segmentIndex = -1
+                    activityId = null
                     pointSamples = ArrayList()
                     streamSamples = ArrayList()
                 }
@@ -285,9 +290,26 @@ object Gpx {
                 }
                 "type" -> if (inTrack && !inPoint) type = value
 
+                // Trailog's own track identity. Malformed ids are ignored rather than fatal: an
+                // unreadable id costs a duplicate on re-import, while refusing the file costs the
+                // ride itself.
+                "activityId" -> if (inTrack && !inPoint) {
+                    activityId = try {
+                        UUID.fromString(value)
+                    } catch (_: IllegalArgumentException) {
+                        null
+                    }
+                }
+
                 // Point-level leaves. `speed`/`course` are also core GPX 1.0 fields.
                 "ele" -> if (inPoint) ele = parseDouble(value)
-                "time" -> if (inPoint) time = parseTime(value)
+                // `<time>` means two different things by position: a fix's timestamp inside a
+                // <trkpt>, and the activity's own time inside <metadata>. The latter is the only
+                // record of when a track-less activity happened.
+                "time" -> when {
+                    inPoint -> time = parseTime(value)
+                    inMetadata && !inAuthor -> metadataTime = parseTime(value)
+                }
                 "accuracy" -> if (inPoint) accuracy = parseDouble(value)
                 "speed" -> if (inPoint) speed = parseDouble(value)
                 "bearing", "course" -> if (inPoint) bearing = parseDouble(value)
@@ -326,6 +348,7 @@ object Gpx {
                             type = type,
                             points = points,
                             samples = takeSamples(),
+                            activityId = activityId,
                         ),
                     )
                     inTrack = false
@@ -386,8 +409,11 @@ object Gpx {
     // ---- Writing ---------------------------------------------------------------------------
 
     /** Serializes a single track. See [write]. */
-    fun write(track: GpxTrack, creator: String = DEFAULT_CREATOR): String =
-        write(listOf(track), creator)
+    fun write(
+        track: GpxTrack,
+        creator: String = DEFAULT_CREATOR,
+        time: Instant? = null,
+    ): String = write(listOf(track), creator, time)
 
     /**
      * Serializes tracks to a GPX 1.1 document. Points are grouped into `<trkseg>` by
@@ -395,7 +421,11 @@ object Gpx {
      * ascending time so output is deterministic. Non-core fields are written under
      * [TRAILOG_NS]. The result is valid GPX that opens in any third-party tool.
      */
-    fun write(tracks: List<GpxTrack>, creator: String = DEFAULT_CREATOR): String {
+    fun write(
+        tracks: List<GpxTrack>,
+        creator: String = DEFAULT_CREATOR,
+        time: Instant? = null,
+    ): String {
         val allTypes = tracks.flatMap { SensorStream.typesIn(it.samples) }.toSet()
 
         val sb = StringBuilder()
@@ -413,6 +443,16 @@ object Gpx {
             sb.append(" xmlns:gpxpx=\"").append(GPXPX_NS).append('"')
         }
         sb.append('>')
+
+        // `<metadata><time>` is when the activity happened. Ordinarily redundant — the first fix
+        // says the same thing — but it is the *only* place an activity with no track points can
+        // record its own date, and those exist: a workout typed in by hand, or one whose geometry
+        // was lost upstream. GPX 1.1 requires <metadata> before any <trk>.
+        if (time != null) {
+            nl(sb, 1); sb.append("<metadata>")
+            nl(sb, 2); sb.append("<time>").append(time.toString()).append("</time>")
+            nl(sb, 1); sb.append("</metadata>")
+        }
 
         for (track in tracks) {
             // One sorted list per sensor type, built once per track: the per-point projection
@@ -433,7 +473,7 @@ object Gpx {
             if (track.type != null) {
                 nl(sb, 2); sb.append("<type>").append(esc(track.type)).append("</type>")
             }
-            writeSampleStream(sb, byType)
+            writeTrackExtensions(sb, track.activityId, byType)
             for (seg in track.points.groupBy { it.segmentIndex }.toSortedMap().values) {
                 nl(sb, 2); sb.append("<trkseg>")
                 for (p in seg.sortedBy { it.time }) writePoint(sb, p, byType)
@@ -447,16 +487,26 @@ object Gpx {
     }
 
     /**
-     * The track's sensor readings, exactly as recorded, in Trailog's own namespace. This is the
-     * lossless copy — every sample with its own timestamp, including the ones taken while the GPS
-     * had nothing to report, which the per-point projection below cannot express at all.
+     * The `<trk>`'s own `<extensions>` — everything about the track that GPX itself cannot say.
+     * GPX 1.1 places this after `<type>` and before the first `<trkseg>`.
      *
-     * Sits in the `<trk>`'s `<extensions>`, which GPX 1.1 places after `<type>` and before the
-     * first `<trkseg>`.
+     * Two things live here. The **activity id**, so a file carries its own identity and re-importing
+     * it is idempotent rather than duplicating the ride; and the **sensor stream**, exactly as
+     * recorded — every sample with its own timestamp, including the ones taken while the GPS had
+     * nothing to report, which the per-point projection cannot express at all.
      */
-    private fun writeSampleStream(sb: StringBuilder, byType: Map<SensorType, List<SensorSample>>) {
-        if (byType.isEmpty()) return
+    private fun writeTrackExtensions(
+        sb: StringBuilder,
+        activityId: UUID?,
+        byType: Map<SensorType, List<SensorSample>>,
+    ) {
+        if (activityId == null && byType.isEmpty()) return
         nl(sb, 2); sb.append("<extensions>")
+        if (activityId != null) {
+            nl(sb, 3)
+            sb.append("<trailog:activityId>").append(activityId.toString())
+                .append("</trailog:activityId>")
+        }
         for ((type, samples) in byType) {
             nl(sb, 3); sb.append("<trailog:samples type=\"").append(type.name).append("\">")
             for (s in samples) {
