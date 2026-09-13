@@ -375,7 +375,12 @@ track-less activities, exactly like the manual swims: honestly summary-only beat
 > it. The archive's shape, the derived ids and the track-less handling are
 > `docs/adr/0024-the-import-archive-is-a-zip-of-gpx-with-derived-ids.md`.
 >
-> **Still to build: the app's bulk import** of that archive. Until it exists the zip is inert.
+> **The app's bulk import is built (2026-09-13).** Settings → Data reads a zip of GPX back in,
+> streaming one activity at a time and writing each in a single transaction with its statistics
+> recomputed from the points. Idempotent on the activity id and **additive only** — an activity
+> already stored is skipped, never overwritten, so the names and types corrected after a first run
+> survive a second. **Not yet exercised on a device**, which is where the remaining risk is: the
+> ingest volume, not the parsing.
 
 Durable. A JVM CLI that uses `:core` for parsing, so there is exactly one GPX parser in the
 project.

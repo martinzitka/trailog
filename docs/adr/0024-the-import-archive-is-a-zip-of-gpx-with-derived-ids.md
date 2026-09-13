@@ -50,6 +50,19 @@ somewhere; re-running after a correction has to be cheap, or the mapping cannot 
 Carrying the id *in the file* rather than in a side-car manifest keeps each GPX self-contained, so a
 single file dropped in behaves the same as one inside an archive.
 
+### The import is additive, never destructive
+
+An activity whose id is already stored is **skipped**, not updated. The obvious alternative — treat
+a later archive as authoritative and overwrite — is wrong here, because the first thing anyone does
+after importing a history is correct the names and types the mapping got wrong. Overwriting would
+discard exactly that work, silently, on a re-run whose whole purpose was to be safe to repeat.
+
+Nothing in the import path deletes or modifies stored data, so a failed or interrupted run needs no
+recovery: fewer activities arrived than the archive held, and running it again picks up the rest.
+
+One unreadable entry is counted and stepped over rather than aborting the run. An archive can hold a
+whole history, and losing all of it to one truncated file would be the worst available behaviour.
+
 ### `<metadata><time>` carries the date a track cannot
 
 A small number of workouts have no usable track: some typed in by hand, and some whose geometry was
