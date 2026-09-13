@@ -61,8 +61,8 @@ enum class ActivityType(
     ICE_SKATING(0.5, 16.0),            // ~58 km/h
 
     /**
-     * Kite-powered travel on snow. Genuinely fast — the imported Hardangervidda sessions average
-     * 19–25 km/h across 45–81 km days, with peaks around 54 km/h.
+     * Kite-powered travel on snow. Genuinely fast: imported sessions sustain averages far above
+     * walking pace over long days, with peaks around 15 m/s.
      */
     SNOWKITING(0.5, 25.0),             // ~90 km/h
 

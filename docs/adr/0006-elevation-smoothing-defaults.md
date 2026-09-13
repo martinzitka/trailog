@@ -13,8 +13,8 @@ computes it by smoothing the altitude series (centered moving average, `smoothin
 points) then accumulating with a deadband (`threshold` metres) — see `Elevation.kt`. Until now
 the defaults (window 7, threshold 3 m) were provisional, tuned only against synthetic tests.
 
-The first real reference ride (Motorola edge 40, **no barometer**, so altitude is GPS-only and
-noisy) was recorded on 2026-08-05 over a ~38 km loop, with two independent elevation references:
+The first real reference ride was recorded on a device with **no barometer**, so altitude is
+GPS-only and noisy, with two independent elevation references:
 
 - **Sports Tracker** (the app's own export of the same ride): **552 m** ascent. GPS-altitude
   based, lightly smoothed. The developer distrusts it precisely because the phone has no

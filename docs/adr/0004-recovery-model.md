@@ -12,8 +12,7 @@ CLAUDE.md frames reboot recovery as a functional requirement and, from it, deriv
 "Allow all the time" (`ACCESS_BACKGROUND_LOCATION`) is required so a location foreground
 service can be launched from a `BOOT_COMPLETED` receiver on Android 14+.
 
-M0 tested this on the developer's actual device (Motorola edge 40, Android 15) across two
-reboots taken mid-recording:
+M0 tested this on a real device (Android 15) across two reboots taken mid-recording:
 
 - **Data survival was total, both times.** Every point recorded before the reboot
   persisted; a reboot mid-ride costs nothing. This is the `PRAGMA synchronous = FULL` +

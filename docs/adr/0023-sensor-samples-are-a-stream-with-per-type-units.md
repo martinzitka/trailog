@@ -8,8 +8,8 @@ Accepted
 
 ## Context
 
-Nine of the exported Sports Tracker workouts carry per-point heart rate, and the importer (M2.2) has
-to write complete rows on its first pass. Importing first and backfilling later is worse than it
+Some of the exported Sports Tracker workouts carry per-point heart rate, and the importer (M2.2)
+has to write complete rows on its first pass. Importing first and backfilling later is worse than it
 sounds: the importer deduplicates, so a re-run *skips* an existing activity rather than filling in
 what was missing, and by then hundreds of imported activities will have been renamed and retyped by
 hand. That is why M2.3's foundation slice was scheduled ahead of the import CLI.
