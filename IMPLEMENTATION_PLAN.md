@@ -367,6 +367,15 @@ track-less activities, exactly like the manual swims: honestly summary-only beat
 > per-point heart rate, and the importer must write complete rows on its first pass — the dedupe
 > rule means a later re-run skips existing activities instead of backfilling them. The importer can
 > now read a GPX's heart rate through `:core` and write it with the activity. See M2.3 below.
+>
+> **The CLI half is built (2026-09-13).** `:tools:importer` reads the export and emits a
+> Trailog-canonical archive. Verified against a real export: one entry per catalogued workout with
+> distinct ids, every activity id resolved through the mapping files with nothing falling back to
+> OTHER unmapped, and per-point heart rate carried through on exactly the workouts known to have
+> it. The archive's shape, the derived ids and the track-less handling are
+> `docs/adr/0024-the-import-archive-is-a-zip-of-gpx-with-derived-ids.md`.
+>
+> **Still to build: the app's bulk import** of that archive. Until it exists the zip is inert.
 
 Durable. A JVM CLI that uses `:core` for parsing, so there is exactly one GPX parser in the
 project.
@@ -418,7 +427,10 @@ anywhere else, and `:core` parses both fields faithfully without applying it.
 importing it fixes the figure — but the acceptance comparison below must treat outliers as
 *suspected source errors* rather than as import bugs, and report them for inspection instead of
 failing.
-- Before M3 exists: writes directly to a local store or emits app-importable output.
+- Before M3 exists: **emits an archive the app imports** — a zip of GPX in the same shape the app's
+  own bulk export writes, so migration and restore-from-backup are one operation rather than two
+  code paths (ADR 0024). Settled 2026-09-13; the alternative, having the CLI hand-write Room's
+  schema over JDBC, would have created a second schema owner that drifts from the migrations.
 - After M3 exists: authenticates and uploads via the sync API as an ordinary client.
 - Also the natural home for driving the M2.1 scraper.
 

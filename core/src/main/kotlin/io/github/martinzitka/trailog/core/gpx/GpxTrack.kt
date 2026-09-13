@@ -3,6 +3,8 @@ package io.github.martinzitka.trailog.core.gpx
 import io.github.martinzitka.trailog.core.model.RawPoint
 import io.github.martinzitka.trailog.core.model.Segment
 import io.github.martinzitka.trailog.core.model.SensorSample
+import kotlinx.datetime.Instant
+import java.util.UUID
 
 /**
  * One `<trk>` from a GPX file: its optional name, description and type, and its points with a
@@ -23,6 +25,11 @@ import io.github.martinzitka.trailog.core.model.SensorSample
  * @property description the track's `<desc>`, or null if absent.
  * @property type the track's `<type>` as free text (e.g. "cycling"), or null if absent.
  * @property points every `<trkpt>` in file order, each tagged with its segment ordinal.
+ * @property activityId the Trailog activity this track *is*, when the file carries one in its
+ *   `<trk><extensions>`. Null for any GPX not written by Trailog. It is what makes importing a file
+ *   idempotent: a re-import recognises a ride it already holds instead of duplicating it, which is
+ *   also what turns an exported archive into a restorable backup. Still the caller's job to decide
+ *   what to do with it — this type only reports what the file said.
  * @property samples the track's sensor readings — heart rate and its kin — as their own
  *   timestamped stream. Read from Trailog's own extension when the file has one, and otherwise
  *   from the per-point `gpxtpx:` elements a foreign file carries, in which case each sample takes
@@ -34,6 +41,7 @@ data class GpxTrack(
     val type: String?,
     val points: List<RawPoint>,
     val samples: List<SensorSample> = emptyList(),
+    val activityId: UUID? = null,
 ) {
     /**
      * The track's points read as ordered, de-duplicated [Segment]s — the same view the rest of
@@ -57,6 +65,9 @@ data class GpxTrack(
  * @property creator the `<gpx creator="...">` attribute, or null if absent.
  * @property name `<metadata><name>`, or null if absent. Not the `<author><name>`.
  * @property description `<metadata><desc>`, or null if absent.
+ * @property time `<metadata><time>` — when the activity happened, or null if absent. Usually
+ *   redundant against the first fix, and the only record of the date for a track with no points
+ *   at all: one typed in by hand, or one whose geometry was lost before it ever reached Trailog.
  * @property tracks every `<trk>` in file order.
  */
 data class GpxDocument(
@@ -64,4 +75,5 @@ data class GpxDocument(
     val name: String?,
     val description: String?,
     val tracks: List<GpxTrack>,
+    val time: Instant? = null,
 )
